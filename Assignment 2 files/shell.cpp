@@ -19,7 +19,7 @@ Name : Aditya Rastogi (16CS30042)
 #define EXIT_FLAG 0
 using namespace std;
 
-int breakString(char **list,char *str,char *delim){
+int breakString(char **list,char *str,char *delim){	// break a string according to a delimiter
 	int i=0;
 	list[i]=strtok(str,delim);
 	while(list[i]!=NULL){
@@ -29,7 +29,7 @@ int breakString(char **list,char *str,char *delim){
 	return i;
 }
 
-int findInput(char *input){
+int findInput(char *input){				// find the index of <
 	for(int i=0;i<strlen(input);i++){
 		if(input[i]=='<')
 			return i;
@@ -37,7 +37,7 @@ int findInput(char *input){
 	return -1;
 }
 
-int findOutput(char *input){
+int findOutput(char *input){			// find the index of >
 	for(int i=0;i<strlen(input);i++){
 		if(input[i]=='>')
 			return i;
@@ -45,42 +45,7 @@ int findOutput(char *input){
 	return -1;
 }
 
-// void executeExternal(char *input){
-
-// 	//for all commands and arguments
-// 	char *args[MAX];
-
-// 	//get all args
-// 	int i=0;
-// 	args[i]=strtok(input," \n");		//Read the filename and individual arguments
-// 	while(args[i]!=NULL){
-// 		// printf("%s",args[i]);
-// 		i++;
-// 		args[i]=strtok(NULL," \n");
-// 	}
-
-// 	//fork this process to run the command in the child process
-// 	pid_t p=fork();
-	
-// 	if(p<0){
-// 		//fork error
-// 		printf("Terminal process could not be created\n");
-// 	}
-// 	else if(p==0){
-// 		//child process
-// 		execvp(args[0],args);			//execute the  other program
-		
-// 		//if execvp doesn't work
-// 		printf("Enter a valid program! \n");
-// 		kill(getpid(),SIGTERM);
-// 	}
-// 	else {
-// 		//wait for the child process
-// 		wait(NULL);
-// 	}
-// }
-
-void executeExternal(char *input){
+void executeExternal(char *input){		// execute external command
 
 	char *args[MAX];
 	if(!strcmp(input,"exit")){		//If string is quit then quit
@@ -198,15 +163,11 @@ void executeInputOutput(char *input){
 		else return;
 		executeExternal(args[0]);
 	}
-	else {
-		wait(NULL);
-		usleep(90000);
-	}
 	return;
 	exit(0);
 }
 
-void executePipe(char** args, int N, int backFlag){
+void executePipe(char** args, int N){
 	//define N-1 pipes
 	int p[N-1][2];
 
@@ -219,30 +180,26 @@ void executePipe(char** args, int N, int backFlag){
 	}
 
 	//create N child processes
-	
-	for(int i=0;i<N;i++) 
-    { 
-        if(fork() == 0) 
-        { 
+	pid_t pd;
+	for(int i=0;i<N;i++) { 
+		// printf("%d",i);
+        if((pd=fork()) == 0) { 
         	//this is the child process
-
         	//read from the previous pipe if it exists
         	if(i!=0){
-        		//it doesn't write to the previous pipe
-        		close(p[i-1][1]);	
-
         		//redirects STDIN to read end of the previous pipe
         		dup2(p[i-1][0], 0); 
         	}
         	
         	//write to the next pipe if it exists
         	if(i!=N-1){
-        		//it doesn't read from the next pipe
-        		close(p[i][0]);		
-
         		//redirects STDOUT to write end of the next pipe
         		dup2(p[i][1], 1);	
         	}
+			for(int j=0;j<N-1;j++){	// closes all pipes
+				close(p[j][0]);
+				close(p[j][1]);
+			}
 
         	//execute the i-th command
         	executeInputOutput(args[i]);
@@ -250,15 +207,15 @@ void executePipe(char** args, int N, int backFlag){
         	//exit from the child process	
             exit(0); 
         }
-        else{
-        	//sleep
-    		usleep(100000);
-        } 
+		else {
+			usleep(10000);
+		}
     }
-
-    //wait for the child process if backFlag is 0, otherwise not
-	if(backFlag==0)
-		wait(NULL); 
+	waitpid(-1,NULL,0);
+	exit(0);
+    // wait for the child process if backFlag is 0, otherwise not
+	// if(backFlag==0)
+	// 	wait(NULL); 
 }
 
 int main(int argc, char *argv[]){
@@ -336,6 +293,16 @@ int main(int argc, char *argv[]){
 			}
 		}
 
-		executePipe(args, i, backFlag);
+		if(fork()==0){
+			executePipe(args, i);
+			kill(getpid(),SIGTERM);
+		}
+		else {
+			// printf("%d ",backFlag);
+			usleep(90000);
+			if(backFlag==0){
+				while(wait(NULL)>0);
+			}
+		}
 	}
 }

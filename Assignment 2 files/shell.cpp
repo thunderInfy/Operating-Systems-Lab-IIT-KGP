@@ -19,7 +19,7 @@ Name : Aditya Rastogi (16CS30042)
 #define EXIT_FLAG 0
 using namespace std;
 
-int breakString(char **list,char *str,char *delim){	// break a string according to a delimiter
+int breakString(char **list,char *str,const char *delim){	// break a string according to a delimiter
 	int i=0;
 	list[i]=strtok(str,delim);
 	while(list[i]!=NULL){
@@ -69,7 +69,7 @@ void executeInputOutput(char *input){
 	int in=findInput(input);
 	int out=findOutput(input);
 	// printf("%d %d ",in,out);
-	i=breakString(args,input,"<>\n");
+	i=breakString(args,input,"&<>\n");
 	// printf(" %d ",i);
 	// printf("%s %s ",args[1],args[0]);
 
@@ -142,7 +142,7 @@ void executeInputOutput(char *input){
 					printf("Error in output file\n");
 					return;
 				}
-				printf("%s ",files[0]);
+				// printf("%s ",files[0]);
 				ofd = open(files[0], O_CREAT | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
 				f=breakString(files,args[1]," \n");
@@ -188,13 +188,17 @@ void executePipe(char** args, int N){
         	//read from the previous pipe if it exists
         	if(i!=0){
         		//redirects STDIN to read end of the previous pipe
-        		dup2(p[i-1][0], 0); 
+				close(p[i-1][1]);
+        		dup2(p[i-1][0], 0);
+				close(p[i-1][0]); 
         	}
         	
         	//write to the next pipe if it exists
         	if(i!=N-1){
         		//redirects STDOUT to write end of the next pipe
-        		dup2(p[i][1], 1);	
+				close(p[i][0]);
+        		dup2(p[i][1], 1);
+				close(p[i][1]);	
         	}
 			for(int j=0;j<N-1;j++){	// closes all pipes
 				close(p[j][0]);
@@ -209,13 +213,15 @@ void executePipe(char** args, int N){
         }
 		else {
 			usleep(10000);
+			for(int j=0;j<i;j++){	// closes all pipes
+				close(p[j][0]);
+				close(p[j][1]);
+			}
 		}
     }
-	waitpid(-1,NULL,0);
+	while(wait(NULL)>0);
+	// waitpid(-1,NULL,0);
 	exit(0);
-    // wait for the child process if backFlag is 0, otherwise not
-	// if(backFlag==0)
-	// 	wait(NULL); 
 }
 
 int main(int argc, char *argv[]){
@@ -259,22 +265,6 @@ int main(int argc, char *argv[]){
 			}
 		}
 
-		//for the pipe commands' arguments
-		char *args[MAX];
-		int i=0;
-
-		//checking the existence of pipes in the entered command
-
-		//separating individual commands by |
-		args[i]=strtok(input,"|");
-	
-		while(args[i]!=NULL){
-			i++;
-			args[i]=strtok(NULL,"|");
-		}
-
-		// regex b("(.)*&( )*\n");
-
 		int backFlag = 0;
 
 		int j;
@@ -293,15 +283,33 @@ int main(int argc, char *argv[]){
 			}
 		}
 
+		//for the pipe commands' arguments
+		char *args[MAX];
+		int i=0;
+
+		//checking the existence of pipes in the entered command
+
+		//separating individual commands by |
+		args[i]=strtok(input,"|");
+	
+		while(args[i]!=NULL){
+			i++;
+			args[i]=strtok(NULL,"|");
+		}
+
+		// regex b("(.)*&( )*\n");
+		// printf("%d ",backFlag);
+
 		if(fork()==0){
 			executePipe(args, i);
-			kill(getpid(),SIGTERM);
+			// kill(getpid(),SIGTERM);
 		}
 		else {
 			// printf("%d ",backFlag);
-			usleep(90000);
+			// usleep(90000);
 			if(backFlag==0){
-				while(wait(NULL)>0);
+				// printf("backflag");
+				while(waitpid(-1,NULL,0)>0);
 			}
 		}
 	}

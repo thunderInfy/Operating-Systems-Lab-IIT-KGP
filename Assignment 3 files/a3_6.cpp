@@ -9,23 +9,24 @@ using namespace std;
 //parameters for a process
 struct procParams{ 
 	int   procNumber;	//process index in the order of arrival time
-	float arrivalTime;	//arrival time of a process
-	float cpuBurst; 	//cpu burst for a process
-	float startTime;	//time at which the process is first fed into the CPU
-	float endTime;		//the time at which the process is completed
+	double arrivalTime;	//arrival time of a process
+	double cpuBurst; 	//cpu burst for a process
+	double startTime;	//time at which the process is first fed into the CPU
+	double endTime;		//the time at which the process is completed
 };
 
+//structure to hold values of average turn around times for different strategies
 struct AvgTurnAroundTimes{
-	float fcfs;		//First Come First Served
-	float npsjf;	//Non pre-emptive Shortest Job First
-	float psjf;		//Pre-emptive Shortest Job First
-	float rr;		//Round Robin
-	float hrrn;		//Highest response ratio next
+	double fcfs;		//First Come First Served
+	double npsjf;		//Non pre-emptive Shortest Job First
+	double psjf;		//Pre-emptive Shortest Job First
+	double rr;			//Round Robin
+	double hrrn;		//Highest response ratio next
 };
 
 //get exponential distribution from a uniform random variable R between 0 & 1
-float getExpoFromUni(float lambda, float R){
-	float out =  (-1.0/lambda)*log(R);
+double getExpoFromUni(double lambda, double R){
+	double out =  (-1.0/lambda)*log(R);
 	
 	//inter arrival time is between 0 and 10
 	if(out>10){
@@ -35,7 +36,7 @@ float getExpoFromUni(float lambda, float R){
 }
 
 //get uniform random variable between 0 and 1
-float getUni(){
+double getUni(){
 	return ((double) rand() / (RAND_MAX));
 }
 
@@ -47,13 +48,13 @@ procParams* generate_N_processes(int N){
 	S = new procParams[N];
 
 	//specifying some value for lambda
-	float lambda = 0.5;
+	double lambda = 0.5;
 	
 	//R is a uniform random variable between 0 and 1
-	float R = getUni();
+	double R = getUni();
 
 	//the first process
-	S[0].procNumber = 
+	S[0].procNumber = 0;
 	S[0].arrivalTime = 0;
 	S[0].cpuBurst = R*19+1;
 
@@ -64,6 +65,7 @@ procParams* generate_N_processes(int N){
 
 	for(int i=1;i<N;i++){
 
+		S[i].procNumber = i;
 		S[i].arrivalTime = S[i-1].arrivalTime + getExpoFromUni(lambda, getUni());
 		
 		R = getUni();
@@ -88,12 +90,12 @@ void saveProcessParameters(procParams *S, int N, int standardOutput = 0){
 		fout.open("processParams.txt");
 		
 		//write to the file
-		fout<<"Arrival-Time\tCpu-Burst\tStart-Time\tEnd-Time\n";
+		fout<<"S.No.\tArrival-Time\tCpu-Burst\tStart-Time\tEnd-Time\n";
 	}
 	else{
 
 		//write to the console
-		cout<<"Arrival-Time\tCpu-Burst\tStart-Time\tEnd-Time\n";
+		cout<<"S.No.\tArrival-Time\tCpu-Burst\tStart-Time\tEnd-Time\n";
 	}
 
 	//buffer to store formatted string
@@ -102,7 +104,7 @@ void saveProcessParameters(procParams *S, int N, int standardOutput = 0){
 	for(int i=0;i<N;i++){
 
 		//store formatted string in buffer
-		sprintf(buffer,"%.12f\t%.12f\t%.12f\t%.12f\n",S[i].arrivalTime,S[i].cpuBurst,S[i].startTime,
+		sprintf(buffer,"%d\t%.12f\t%.12f\t%.12f\t%.12f\n",S[i].procNumber,S[i].arrivalTime,S[i].cpuBurst,S[i].startTime,
 			S[i].endTime);
 
 		if(!standardOutput)
@@ -113,6 +115,21 @@ void saveProcessParameters(procParams *S, int N, int standardOutput = 0){
 
 	if(!standardOutput)
 		fout.close();
+}
+
+//function to calculate average turnaround time
+double calcAvgTurnAroundTime(procParams* S, int N){
+	double AvgTurnAroundTime = 0;
+	for(int i=0;i<N;i++){
+		/*
+		Turnaround time for a process is the difference between
+		its end time and its arrival time
+		*/
+		AvgTurnAroundTime += S[i].endTime - S[i].arrivalTime;
+	}
+	AvgTurnAroundTime /= N;
+
+	return AvgTurnAroundTime;
 }
 
 //function to copy procParams structure array
@@ -126,8 +143,13 @@ bool ascendingArrivalOrder(procParams s1, procParams s2){
 	return s1.arrivalTime < s2.arrivalTime;
 }
 
+//comparative function to sort according to CPU bursts
+bool ascendingCPUBursts(procParams s1, procParams s2){
+	return s1.cpuBurst < s2.cpuBurst;
+}
+
 //function to simulate FCFS scheduling algorithm
-float FCFS(procParams *S, int N){
+double FCFS(procParams *S, int N){
 
 	//sorting processes on the basis of their arrival times
 	sort(S,S+N,ascendingArrivalOrder);
@@ -145,17 +167,8 @@ float FCFS(procParams *S, int N){
 		S[i].endTime = S[i].startTime + S[i].cpuBurst;
 	}
 
-	float AvgTurnAroundTime = 0;
-	for(int i=0;i<N;i++){
-		/*
-		Turnaround time for a process is the difference between
-		its end time and its arrival time
-		*/
-		AvgTurnAroundTime += S[i].endTime - S[i].arrivalTime;
-	}
-	AvgTurnAroundTime /= N;
+	return calcAvgTurnAroundTime(S,N);
 
-	return AvgTurnAroundTime;
 }
 
 // this is an strucure which implements the operator overlading 
@@ -167,33 +180,64 @@ struct CompareCPUBursts{
 }; 
 
 //function to simulate Non-Preemptive Shortest Job First Algorithm
-float NPSJF(procParams *S, int N){
+double NPSJF(procParams *S, int N){
+
+	/*
+	in this way, if any two processes have the same arrival times, 
+	then, they will be sorted according to their CPU bursts
+	*/
+
+	//sorting processes on the basis of their CPU bursts
+	sort(S,S+N,ascendingCPUBursts);
 
 	//sorting processes on the basis of their Arrival Times
-	sort(S,S+N,ascendingArrivalOrder);
+	stable_sort(S,S+N,ascendingArrivalOrder);
 
 	//priority queue for shortest job
 	priority_queue <procParams, vector<procParams>, CompareCPUBursts> Q;
 
-	float runningTime;
+	//variable to store the timestamp
+	double runningTime = 0;
 
-	//starting time for process 0 will be same as its arrival time
-	S[0].startTime 	= S[0].arrivalTime;
-	S[0].endTime 	= S[0].startTime + S[0].cpuBurst;
+	int i = 0;
 
-	runningTime = S[0].endTime;
-
-	cout<<S[0].cpuBurst<<'\n';
-
-	int i = 1;
-
-	while(S[i].arrivalTime<=runningTime){
-		Q.push(S[i]);
-		i++;
+	while(1){
+		/*
+		adding all those processes to the priority queue which have 
+		arrived till now
+		*/
+		while(S[i].arrivalTime<=runningTime){
+			Q.push(S[i]);
+			i++;
+			if(i>=N){
+				break;
+			}
+		}
+		if(i>=N){
+			break;
+		}
+		if(!Q.empty()){
+			//if Q isn't empty, then pop out a process and run it
+			procParams p = Q.top();
+			S[p.procNumber].startTime = runningTime;
+			runningTime += p.cpuBurst;
+			S[p.procNumber].endTime = runningTime;
+			Q.pop();
+		}
+		else{
+			runningTime = S[i].arrivalTime;
+		}
 	}
-	procParams p = Q.top();
+	while(!Q.empty()){
+		//run all the remaining processes left in the priority queue
+		procParams p = Q.top();
+		S[p.procNumber].startTime = runningTime;
+		runningTime += p.cpuBurst;
+		S[p.procNumber].endTime = runningTime;
+		Q.pop();
+	}
 
-	cout<<p.cpuBurst<<'\n';
+	return calcAvgTurnAroundTime(S,N);
 }
 
 
@@ -228,6 +272,8 @@ int main(){
 	//copying S again to C
 	copyProcParams(C,S,N);
 
-	NPSJF(C,N);
+	//getting average turnaround time in member npsjf of structure A
+	A.npsjf = NPSJF(C,N);
+
 	return 0;
 }

@@ -240,6 +240,73 @@ double NPSJF(procParams *S, int N){
 	return calcAvgTurnAroundTime(S,N);
 }
 
+//function to simulate Preemptive Shortest Job First Algorithm
+double PSJF(procParams *S, int N){
+
+	/*
+	in this way, if any two processes have the same arrival times, 
+	then, they will be sorted according to their CPU bursts
+	*/
+
+	//sorting processes on the basis of their CPU bursts
+	sort(S,S+N,ascendingCPUBursts);
+
+	//sorting processes on the basis of their Arrival Times
+	stable_sort(S,S+N,ascendingArrivalOrder);
+
+	//priority queue for shortest job
+	priority_queue <procParams, vector<procParams>, CompareCPUBursts> Q;
+
+	//variable to store the timestamp
+	double runningTime = 0;
+
+	//variable to store index of running process
+	int runningProc = -1;
+
+	for(int i=0;i<N;i++){
+		//the i-th process arrives
+
+		//current time is same as the arrival time of the i-th process
+		runningTime = S[i].arrivalTime;
+		
+		if(runningProc >= 0){
+			//some process was running earlier
+			
+			if(runningTime >= (S[runningProc].startTime + S[runningProc].cpuBurst)){
+				//the running process has ended
+				S[runningProc].endTime = S[runningProc].startTime + S[runningProc].cpuBurst;
+				runningTime = S[runningProc].endTime;
+				runningProc = -1;
+				i--;
+			}
+			else{
+				//the running process is still going on
+				//update its cpuBurst
+				S[runningProc].cpuBurst-= (runningTime - S[runningProc].startTime);
+				Q.push(S[runningProc]);
+				Q.push(S[i]);
+			}
+		}
+		else{
+			Q.push(S[i]);
+		}
+
+		do{
+			//run the process with the minimum CPU Burst
+			if(!Q.empty()){
+				procParams p = Q.top();
+				p.startTime = runningTime;
+				runningProc = p.procNumber;
+				S[runningProc] = p;
+				S[runningProc].endTime = S[runningProc].startTime + S[runningProc].cpuBurst;
+				runningTime = S[runningProc].endTime;
+				Q.pop();
+			}
+		}while(i==N-1 && !Q.empty());
+	}
+
+	return calcAvgTurnAroundTime(S,N);
+}
 
 int main(){
 
@@ -253,7 +320,7 @@ int main(){
 	AvgTurnAroundTimes A;
 
 	//N processes
-	int N = 20;
+	int N = 10;
 
 	//generate 5 processes
 	S = generate_N_processes(N);
@@ -274,6 +341,12 @@ int main(){
 
 	//getting average turnaround time in member npsjf of structure A
 	A.npsjf = NPSJF(C,N);
+
+	//copying S again to C
+	copyProcParams(C,S,N);
+
+	//getting average turnaround time in member psjf of structure A
+	A.psjf = PSJF(C,N);
 
 	return 0;
 }

@@ -1,7 +1,10 @@
-#include <bits/stdc++.h>
+#include <iostream>
+#include <cmath>
+#include <algorithm>
+#include <queue>
+#include <fstream>
+#include <vector>
 #include <sys/types.h>
-#include <sys/stat.h> 
-#include <fcntl.h>
 #include <unistd.h>
 
 using namespace std;
@@ -29,12 +32,14 @@ struct AvgTurnAroundTimes{
 	double hrrn;		//Highest response ratio next
 
 	void display(){
+		
 		printf("%.12f\n%.12f\n%.12f\n%.12f\n%.12f\n",
-				this->fcfs,
-				this->npsjf,
-				this->psjf,
-				this->rr,
-				this->hrrn);
+					this->fcfs,
+					this->npsjf,
+					this->psjf,
+					this->rr,
+					this->hrrn);
+
 	}
 };
 
@@ -366,7 +371,7 @@ double RR(procParams *S, int N){
 	S[0].startTime 	= S[0].arrivalTime;
 	
 	if(S[0].cpuBurst <= timeQuantum){
-		//process is complete
+		//process 0 is complete
 		complete = 1;
 		S[0].endTime = S[0].startTime + S[0].cpuBurst;
 		S[0].cpuBurst = 0;
@@ -389,7 +394,7 @@ double RR(procParams *S, int N){
 
 	while(1){
 
-		//check how many processes have arrived during the execution of the first process
+		//check how many processes have arrived during the execution of the running process
 		while(runningTime>=S[i].arrivalTime){
 			ReadyQueue.push(S[i]);
 			i++;
@@ -601,7 +606,7 @@ double HRRN(procParams *S, int N){
 int main(){
 
 	//initializing seed
-	srand((unsigned)time(NULL));
+	srand((unsigned)time(NULL)^getpid());
 
 	//structure pointer to store processes
 	procParams* S;
@@ -610,7 +615,10 @@ int main(){
 	AvgTurnAroundTimes A;
 
 	//N processes
-	int N = 10000;
+	int N;
+
+	//taking input from user
+	cin>>N;
 
 	//generate N processes
 	S = generate_N_processes(N);

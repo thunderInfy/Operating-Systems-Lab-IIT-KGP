@@ -13,6 +13,11 @@ struct procParams{
 	double cpuBurst; 	//cpu burst for a process
 	double startTime;	//time at which the process is first fed into the CPU
 	double endTime;		//the time at which the process is completed
+
+	//member function to get response ratio for this process
+	double getResponseRatio(double runningTime){
+		return (runningTime - this->arrivalTime + this->cpuBurst)/(this->cpuBurst);
+	}
 };
 
 //structure to hold values of average turn around times for different strategies
@@ -22,6 +27,15 @@ struct AvgTurnAroundTimes{
 	double psjf;		//Pre-emptive Shortest Job First
 	double rr;			//Round Robin
 	double hrrn;		//Highest response ratio next
+
+	void display(){
+		printf("%.12f\n%.12f\n%.12f\n%.12f\n%.12f\n",
+				this->fcfs,
+				this->npsjf,
+				this->psjf,
+				this->rr,
+				this->hrrn);
+	}
 };
 
 //get exponential distribution from a uniform random variable R between 0 & 1
@@ -340,7 +354,7 @@ double RR(procParams *S, int N){
 	sort(S,S+N,ascendingArrivalOrder);
 
 	//time quantum variable
-	float timeQuantum = 2;
+	double timeQuantum = 2;
 
 	//ready queue
 	queue <procParams> ReadyQueue;
@@ -366,7 +380,7 @@ double RR(procParams *S, int N){
 		S[0].cpuBurst -= timeQuantum;	
 	}
 	//variable for timestamp
-	float runningTime = S[0].endTime;
+	double runningTime = S[0].endTime;
 
 	//which process is running
 	int runningProc = 0;
@@ -479,6 +493,111 @@ double RR(procParams *S, int N){
 
 }
 
+int HandleProcessAndRunningTime(procParams *S, int *Procs, int N, double &runningTime){
+	
+	//variable to store index of the process with maximum response ratio
+	int maxRRindex = -1;
+
+	//maximum response ratio value
+	double maxRR = -1;
+
+	//a temp variable to hold return value of getResponseRatio function
+	double tempRR;
+
+	for(int i=0;i<N;i++){
+
+		if(Procs[i]==1){
+			//means the process is in the Queue
+
+			tempRR = S[i].getResponseRatio(runningTime);
+
+			if(maxRR < tempRR){
+				//update maximum response ratio value
+
+				maxRRindex = i;
+				maxRR = tempRR;
+			}
+		}
+	}
+
+	int j = maxRRindex;
+
+	if(j!=-1){
+
+		//handle j-th process and update running time
+
+		//starting time for process j will be same as running time
+		S[j].startTime 	= runningTime;
+		S[j].endTime 	= S[j].startTime + S[j].cpuBurst;
+
+		runningTime = S[j].endTime;
+
+		//j-th process is done
+		Procs[j] = 2;
+	}
+	
+	return j;
+}
+
+//function to simulate Highest Response Ratio next (Non-preemptive)
+double HRRN(procParams *S, int N){
+
+	//sorting processes on the basis of their arrival times
+	sort(S,S+N,ascendingArrivalOrder);
+
+	//running time variable
+	double runningTime;
+
+	//starting time for process 0 will be same as arrival time
+	S[0].startTime 	= S[0].arrivalTime;
+	S[0].endTime 	= S[0].startTime + S[0].cpuBurst;
+
+	//running time will be the same as the endtime of the first process
+	runningTime = S[0].endTime;
+
+	//array for indices of the processes left
+	int *Procs;
+	Procs = new int[N];
+
+	//0 means not arrived, 1 means in queue and 2 means done 
+	
+	Procs[0] = 2;
+	
+	//for now, assuming all other processes not arrived
+	for(int i=1;i<N;i++){
+		Procs[i] = 0;
+	}
+
+	//processes from 1 to N-1
+	int i = 1;
+
+	while(1){
+
+		//checking processes which have arrived in this time
+		while(runningTime>=S[i].arrivalTime){
+			Procs[i] = 1;
+			i++;
+			if(i>=N){
+				break;
+			}
+		}
+		if(i>=N){
+			break;
+		}
+
+		//the following function returns 1 when no new process has arrived
+		if(HandleProcessAndRunningTime(S, Procs, N, runningTime)==-1){
+			//fast forward running time to the arrival time of the new process
+			runningTime = S[i].arrivalTime;
+		}
+	}
+
+	//run all the remaining processes
+	while(HandleProcessAndRunningTime(S, Procs, N, runningTime)!=-1);
+
+	return calcAvgTurnAroundTime(S,N);
+}
+
 int main(){
 
 	//initializing seed
@@ -491,7 +610,7 @@ int main(){
 	AvgTurnAroundTimes A;
 
 	//N processes
-	int N = 5;
+	int N = 10000;
 
 	//generate N processes
 	S = generate_N_processes(N);
@@ -524,6 +643,15 @@ int main(){
 
 	//getting average turnaround time in member rr of structure A
 	A.rr = RR(C,N);
+
+	//copying S again to C
+	copyProcParams(C,S,N);
+
+	//getting average turnaround time in member hrrn of structure A
+	A.hrrn = HRRN(C,N);
+
+	//print structure A
+	A.display();
 
 	return 0;
 }

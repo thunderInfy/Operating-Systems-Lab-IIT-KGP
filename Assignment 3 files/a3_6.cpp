@@ -274,26 +274,50 @@ double PSJF(procParams *S, int N){
 			
 			if(runningTime >= (S[runningProc].startTime + S[runningProc].cpuBurst)){
 				//the running process has ended
+
+				//calculating endtime for that process
 				S[runningProc].endTime = S[runningProc].startTime + S[runningProc].cpuBurst;
+				
+				/*
+				now the running time should rewind back to that ending time because in between
+				we can have other processes from our queue
+				*/
 				runningTime = S[runningProc].endTime;
+
+				//no process is running at this moment
 				runningProc = -1;
+
+				//to take into account that we rewinded running time
 				i--;
 			}
 			else{
 				//the running process is still going on
+
 				//update its cpuBurst
 				S[runningProc].cpuBurst-= (runningTime - S[runningProc].startTime);
+				
+				//push the previous running process into the queue with the updated cpu burst
 				Q.push(S[runningProc]);
+
+				//push the current process in the queue
 				Q.push(S[i]);
 			}
 		}
 		else{
+
+			//push the current process in the queue
 			Q.push(S[i]);
 		}
 
+		/*
+		this do-while loop will run for more than once only at the end of the outer i loop
+		in order to clear out the queue
+		*/
 		do{
-			//run the process with the minimum CPU Burst
+			//check whether Q is non-empty
 			if(!Q.empty()){
+				//Q is not empty
+				//run the process with the minimum CPU Burst
 				procParams p = Q.top();
 				p.startTime = runningTime;
 				runningProc = p.procNumber;
@@ -308,6 +332,153 @@ double PSJF(procParams *S, int N){
 	return calcAvgTurnAroundTime(S,N);
 }
 
+
+//function to simulate Round Robin with time quantum = 2 units
+double RR(procParams *S, int N){
+
+	//sorting processes on the basis of their arrival times
+	sort(S,S+N,ascendingArrivalOrder);
+
+	//time quantum variable
+	float timeQuantum = 2;
+
+	//ready queue
+	queue <procParams> ReadyQueue;
+
+	//check if current process is complete
+	int complete;
+
+	//starting time for process 0 will be same as arrival time
+	S[0].startTime 	= S[0].arrivalTime;
+	
+	if(S[0].cpuBurst <= timeQuantum){
+		//process is complete
+		complete = 1;
+		S[0].endTime = S[0].startTime + S[0].cpuBurst;
+		S[0].cpuBurst = 0;
+	}
+	else{
+		//process is not complete
+		complete = 0;
+		S[0].endTime = S[0].startTime + timeQuantum;
+
+		//update its CPU time
+		S[0].cpuBurst -= timeQuantum;	
+	}
+	//variable for timestamp
+	float runningTime = S[0].endTime;
+
+	//which process is running
+	int runningProc = 0;
+
+	int i = 1;
+
+	while(1){
+
+		//check how many processes have arrived during the execution of the first process
+		while(runningTime>=S[i].arrivalTime){
+			ReadyQueue.push(S[i]);
+			i++;
+			if(i>=N){
+				break;
+			}
+		}
+		if(i>=N){
+
+			if(complete==0){
+				//current process is not complete, add it to the end of the ready queue
+				ReadyQueue.push(S[runningProc]);
+			}
+
+			break;
+		}
+
+		if(complete==0){
+			//current process is not complete, add it to the end of the ready queue
+			ReadyQueue.push(S[runningProc]);
+		}
+
+		if(!ReadyQueue.empty()){
+			//ReadyQueue is not empty
+
+			//Get the process at the front
+			procParams p = ReadyQueue.front();
+
+			//running time will be the start time of that process
+			p.startTime = runningTime;
+
+			if(p.cpuBurst <= timeQuantum){
+				//process is complete
+				complete = 1;
+				p.endTime = p.startTime + p.cpuBurst;
+				
+				//update remaining cpu time
+				p.cpuBurst = 0;
+			}
+			else{
+				//process is not complete
+				complete = 0;
+				p.endTime = p.startTime + timeQuantum;
+
+				//update its CPU time
+				p.cpuBurst -= timeQuantum;	
+			}
+
+			//update running time
+			runningTime = p.endTime;
+			runningProc = p.procNumber;
+			S[p.procNumber] = p;
+
+			//pop from the ready queue
+			ReadyQueue.pop();
+		}
+		else{
+			//Ready Queue is empty, fast forward the time to the next process's arrival time
+			runningTime = S[i].arrivalTime;
+		}
+	}
+
+	while(!ReadyQueue.empty()){
+		//ReadyQueue is not empty
+
+		procParams p = ReadyQueue.front();
+		p.startTime = runningTime;
+
+		if(p.cpuBurst <= timeQuantum){
+			//process is complete
+			complete = 1;
+			p.endTime = p.startTime + p.cpuBurst;
+			
+			//update remaining cpu time
+			p.cpuBurst = 0;
+		}
+		else{
+			//process is not complete
+			complete = 0;
+			p.endTime = p.startTime + timeQuantum;
+
+			//update its CPU time
+			p.cpuBurst -= timeQuantum;	
+		}
+
+		//update running time
+		runningTime = p.endTime;
+		runningProc = p.procNumber;
+		S[p.procNumber] = p;
+
+		//pop from the ready queue
+		ReadyQueue.pop();
+
+		if(complete==0){
+			ReadyQueue.push(S[p.procNumber]);
+		}
+	}
+
+
+	return calcAvgTurnAroundTime(S,N);
+
+}
+
 int main(){
 
 	//initializing seed
@@ -320,9 +491,9 @@ int main(){
 	AvgTurnAroundTimes A;
 
 	//N processes
-	int N = 10;
+	int N = 5;
 
-	//generate 5 processes
+	//generate N processes
 	S = generate_N_processes(N);
 	
 	//save process parameters in a file named processParams.txt
@@ -347,6 +518,12 @@ int main(){
 
 	//getting average turnaround time in member psjf of structure A
 	A.psjf = PSJF(C,N);
+
+	//copying S again to C
+	copyProcParams(C,S,N);
+
+	//getting average turnaround time in member rr of structure A
+	A.rr = RR(C,N);
 
 	return 0;
 }

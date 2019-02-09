@@ -1,6 +1,7 @@
-#include <bits/stdc++.h>
-#include <unistd.h>
+#include <cstdio>
+#include <iostream>
 #include <pthread.h>
+
 using namespace std;
 
 int STATUS[10000], N, pid=0, READY[10000];
@@ -55,8 +56,22 @@ void *do_jobs(void *n) {
 	}
 }
 
-int main(int argc, char *argv[]) {
-	cin>>N;
+
+struct myThread{
+	pthread_t tid;
+	pthread_attr_t attr;
+	
+
+	void createMe(){
+		pthread_attr_init(&this->attr);
+		pthread_create(&this->tid, &this->attr, );
+	}
+};
+
+int main() {
+	
+	//Specifying value of N
+	int N = 10;
 
 	for(int i=0; i<N; i++){
 		READY[i]=i;
@@ -70,5 +85,8 @@ int main(int argc, char *argv[]) {
 	pthread_create(&reporter, NULL, report_jobs, NULL);
 
 	while(1);
+
+
+	return 0;
 }
 

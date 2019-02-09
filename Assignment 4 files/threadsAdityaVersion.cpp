@@ -1,91 +1,79 @@
-#include <cstdio>
 #include <iostream>
+#include <cstdio>
 #include <pthread.h>
+#include <cstdlib>
+#include <ctime>
 
 using namespace std;
 
-int STATUS[10000], N, pid=0, READY[10000];
-int change=0, from=-1, to=-1;
-pthread_t tid[10000], scheduler, reporter;
+void* doJobs(void*);
+int* status;
 
-void *report_jobs(void *n) {
-	while(1){
-		while(!change);
-		printf("Change from %d to %d", from, to);
-		change = 0;
-	}
-}
+class myThreads{
 
-void *schedule_jobs(void *n) {
-	// kill(tid[0], SIGUSR2);
-	while(1) {
-		sleep(3);
-		kill(tid[READY[pid]], SIGUSR1);
-		STATUS[READY[pid]] = 0; 
-		from = READY[pid];
-		pid = (pid+1)%N; change = 1;
-		STATUS[READY[pid]] = 1; 
-		to = READY[pid];
-		kill(tid[READY[pid]], SIGUSR2);
-	}
-}
-
-void sig_handler(int signo) {
-	if(signo == SIGUSR1){
-		STATUS[READY[pid]] = 0;
-		printf("Signal received");
-	}
-	if(signo == SIGUSR2){
-		STATUS[READY[pid]] = 1;
-		printf("Signal Received");
-	}
-}
-
-void *do_jobs(void *n) {
-	// int p = *(int*)n;
-	int p;
-	while(1){
-		while(!(p=*(int*)n)){
-			signal(SIGUSR2, sig_handler);
+	private:
+		void initType(){
+			if((rand() % 2)==0){
+				this->type = 'P';
+			}
+			else{
+				this->type = 'C';
+			}
 		}
-		sleep(1);
-		printf("Thread %d \n",p);
-		while((p=*(int*)n)){
-			signal(SIGUSR1, sig_handler);
+
+	public:
+
+		pthread_t 	tid;
+		char 		type;
+
+		void createMe(){
+			initType();
+			pthread_create(&this->tid, NULL, doJobs, (void *) this);
 		}
-	}
-}
 
+		void join(){
+			pthread_join(this->tid, NULL);
+		}
 
-struct myThread{
-	pthread_t tid;
-	pthread_attr_t attr;
-	
-
-	void createMe(){
-		pthread_attr_init(&this->attr);
-		pthread_create(&this->tid, &this->attr, );
-	}
 };
+
+void* doJobs(void *param){
+	myThreads *t;
+	t = (myThreads *) param;
+	cout<<t->type<<'\n';
+}
 
 int main() {
 	
+	//specifying random seed
+	srand((unsigned)time(NULL));
+
 	//Specifying value of N
 	int N = 10;
 
-	for(int i=0; i<N; i++){
-		READY[i]=i;
+	//threadObj will be a dynamic array of thread objects
+	myThreads *threadObj;
+	threadObj = new myThreads[N];
+
+	//dynamically create status array
+	status = new int[N];
+
+	//create threads
+	for(int i=0;i<N;i++){
+		threadObj[i].createMe();
 	}
 
-	for(int i=0; i<N; i++){
-		pthread_create(&tid[i], NULL, do_jobs, &STATUS[i]);
+	//join threads
+	for(int i=0;i<N;i++){
+		threadObj[i].join();
 	}
 
-	pthread_create(&scheduler, NULL, schedule_jobs, NULL);
-	pthread_create(&reporter, NULL, report_jobs, NULL);
+	//delete the dynamic array of threadObj
+	delete threadObj;
 
-	while(1);
 
+	//delete the dynamic array of status
+	delete status;
 
 	return 0;
 }

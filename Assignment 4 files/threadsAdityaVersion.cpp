@@ -5,6 +5,7 @@
 #include <ctime>
 #include <signal.h>
 #include <unistd.h>
+#include <map>
 
 using namespace std;
 
@@ -21,6 +22,9 @@ class myThreads{
 		char 		type;
 		int 		threadNum;
 		int 		state;	//state = 0 means sleep, 1 means awake and 2 means complete
+
+		// a map to get threadNum from tid
+		static map <pthread_t, int> m;	
 
 	private:
 		void initType(){
@@ -50,6 +54,7 @@ class myThreads{
 
 //threadObj will be a dynamic array of thread objects
 myThreads *threadObj;
+map <pthread_t, int> myThreads::m;
 
 void installSignalHandler(){
 	//installing signal handlers here
@@ -61,13 +66,18 @@ void sleepOrWake(int signo){
 
 	if(signo==SIGUSR1){
 		cout<<"I am sleeping\n";
-		threadObj[t->threadNum].state = 0;
-		status[t->threadNum] = 0;
+
+		//pthread_self() returns the thread id of the calling thread
+		threadObj[myThreads::m[pthread_self()]].state = 0;
+		status[myThreads::m[pthread_self()]] = 0;
+	
 	}
 	else if(signo==SIGUSR2){
 		cout<<"Thanks for waking me up\n";
-		threadObj[t->threadNum].state = 1;
-		status[t->threadNum] = 1;
+
+		//pthread_self() returns the thread id of the calling thread
+		threadObj[myThreads::m[pthread_self()]].state = 1;
+		status[myThreads::m[pthread_self()]] = 1;
 	}
 
 	installSignalHandler();
@@ -77,6 +87,9 @@ void* doJobs(void *param){
 	
 	myThreads *t;
 	t = (myThreads *) param;
+
+	//m is a map which maps thread id to thread num variable
+	myThreads::m[t->tid] = t->threadNum;
 	
 	installSignalHandler();
 
@@ -89,8 +102,17 @@ void* doJobs(void *param){
 
 void* scheduler(void *param){
 
-	
-
+	pthread_kill(threadObj[1].tid,SIGUSR1);
+	sleep(1);
+	pthread_kill(threadObj[4].tid,SIGUSR2);
+	sleep(1);
+	pthread_kill(threadObj[2].tid,SIGUSR2);
+	sleep(1);
+	for(int i=0;i<10;i++){
+		cout<<status[i]<<'\t';
+	}
+	cout<<'\n';
+	return 0;
 }
 
 int main() {
@@ -120,6 +142,8 @@ int main() {
 
 	//create scheduler thread
 	pthread_create(&SchId, NULL, scheduler, NULL);
+	pthread_join(SchId, NULL);
+
 
 	//join threads
 	for(int i=0;i<N;i++){

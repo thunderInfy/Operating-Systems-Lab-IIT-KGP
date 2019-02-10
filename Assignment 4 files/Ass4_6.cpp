@@ -297,12 +297,48 @@ void* scheduler(void *param){
 	return 0;
 }
 
+/*
+
+int *previous;
+void report(){
+	for(int i=0; i<N; i++){
+		if(S.status[i]!=previous[i]){
+			string curr="",prev="";
+			
+			if(S.status[i] == 0)
+				curr = "SLEEP";
+			else if(S.status[i] == 1)
+				curr = "RUNNING";
+			else if(S.status[i] == 2)
+				curr = "TERMINATED";
+
+			if(previous[i] == 0)
+				prev = "SLEEP";
+			else if(previous[i] == 1)
+				prev = "RUNNING";
+			else if(previous[i] == 2)
+				prev = "TERMINATED";
+
+			previous[i]=S.status[i];
+
+			cout<<"Buffer Size : "<<buffer.size()<<endl;
+			cout<<"Change of "<<i<<" from "<<prev<<" to "<<curr<<endl;
+		}
+	}
+}
+
+
+*/
+
+
 void* reporter(void *param){
 
 	while(1){
 		while(S.change.flag == 0 && (S.threadTerminated < 0));
 		
 		if(S.change.flag !=0){
+
+			//report();
 			
 			//restoring change flag's value
 			S.change.flag = 0;

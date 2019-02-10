@@ -20,6 +20,14 @@ void sleepOrWake(int);
 
 int completed = 0;
 
+int* status;
+
+// struct STATUS{
+// 	int* status;
+// 	int  statusChanged;
+// 	int  threadTerminated;
+// };
+
 int N, MAX;
 vector<int> buffer;
 
@@ -28,31 +36,23 @@ typedef struct _contextSwitch {
 	int from;
 	int to;
 }contextSwitch;
+contextSwitch change;
 
-struct STATUS{
-	int* 			status;
-	contextSwitch 	change;
-	int 			threadTerminated;
-};
-
-STATUS S;
-
-
-//class for handling thread functions
 class myThreads{
 
 	public:
 
-		pthread_t 	tid;				//thread id
-		char 		type;				//thread type 'P' or 'C'
-		int 		threadNum;			//thread index in the global array
-		int 		state;				//state = 0 means sleep, 1 means awake and 2 means complete
-		static map <pthread_t, int> m;	//map to get threadNum from tid
+		pthread_t 	tid;
+		char 		type;
+		int 		threadNum;
+		int 		state;	//state = 0 means sleep, 1 means awake and 2 means complete
+
+		// a map to get threadNum from tid
+		static map <pthread_t, int> m;	
 
 	private:
-
-		//initializing type of thread with 'P' or 'C' each having equal probability
 		void initType(){
+			//initializing type of thread with 'P' or 'C' each having equal probability
 			if((rand() % 2)==0){
 				this->type = 'P';
 			}
@@ -63,59 +63,49 @@ class myThreads{
 
 	public:
 
-		//create thread
 		void createMe(int index){
-			//give thread a type
 			this->initType();
-
-			//give it a index, same as received parameter
 			this->threadNum = index;
-
-			//initially, the thread will sleep
 			this->state = 0;
-
-			//create the thread
 			pthread_create(&this->tid, NULL, doJobs, (void *) this);
 		}
 
 		void join(){
-
-			//join thread
 			pthread_join(this->tid, NULL);
 		}
+
+		void exit(){
+			//pthread_cancel(this->tid, NULL);
+		}
+
 };
 
-myThreads *threadObj;				//threadObj will be a dynamic array of thread objects
-map <pthread_t, int> myThreads::m;	//declaring static member map of the above class
+//threadObj will be a dynamic array of thread objects
+myThreads *threadObj;
+map <pthread_t, int> myThreads::m;
 
-//function to install signal handlers
 void installSignalHandler(){
 	//installing signal handlers here
 	signal(SIGUSR1, sleepOrWake);
 	signal(SIGUSR2,	sleepOrWake);
 }
 
-//the function which handles signals
 void sleepOrWake(int signo){
 
 	if(signo==SIGUSR1){
-		// cout<<"I am sleeping "<<threadObj[myThreads::m[pthread_self()]].threadNum<<"\n";
+		cout<<"I am sleeping "<<threadObj[myThreads::m[pthread_self()]].threadNum<<"\n";
 
 		//pthread_self() returns the thread id of the calling thread
 		threadObj[myThreads::m[pthread_self()]].state = SLEEP;
-		
-		//updating STATUS data structure
-		S.status[myThreads::m[pthread_self()]] = SLEEP;
+		status[myThreads::m[pthread_self()]] = SLEEP;
 	
 	}
 	else if(signo==SIGUSR2){
-		// cout<<"Thanks for waking me up "<<threadObj[myThreads::m[pthread_self()]].threadNum<<"\n";
+		cout<<"Thanks for waking me up "<<threadObj[myThreads::m[pthread_self()]].threadNum<<"\n";
 
 		//pthread_self() returns the thread id of the calling thread
 		threadObj[myThreads::m[pthread_self()]].state = RUN;
-		
-		//updating STATUS data structure
-		S.status[myThreads::m[pthread_self()]] = RUN;
+		status[myThreads::m[pthread_self()]] = RUN;
 	}
 
 	installSignalHandler();
@@ -139,7 +129,7 @@ void* doJobs(void *param){
 			while(!(threadObj[num].state));
 			if(buffer.size()==MAX){
 				threadObj[num].state=0;
-				S.status[num]=0;
+				status[num]=0;
 			}
 			else {
 				buffer.push_back(rand()%100);
@@ -148,7 +138,7 @@ void* doJobs(void *param){
 			}
 		}
 		threadObj[num].state = TERMINATE;
-		S.status[num] = TERMINATE;
+		status[num] = TERMINATE;
 	}
 	else if(threadObj[num].type == 'C'){
 		//while(threadObj[num].state!=TERMINATE){
@@ -159,7 +149,7 @@ void* doJobs(void *param){
 
 				if(buffer.size()==0){
 					threadObj[num].state = 0;
-					S.status[num] = 0;
+					status[num] = 0;
 				}
 				else {
 					buffer.pop_back();
@@ -184,28 +174,27 @@ int count_complete(){
 
 void* scheduler(void *param){
 
-	//clock_t start_time;
-
+//	clock_t start_time; 
 	while(1) {
 		sleep(1);
 		//cout<<" "<<change.to<<" "<<threadObj[change.to].tid<<" "<<threadObj[change.to].threadNum<<" ";
 		
 
-		if(threadObj[S.change.to].state!=TERMINATE)
-			pthread_kill(threadObj[S.change.to].tid, SIGUSR2);
+		if(threadObj[change.to].state!=TERMINATE)
+			pthread_kill(threadObj[change.to].tid, SIGUSR2);
 
 		// start_time = clock();
 		// sleep(1);
-		// while((clock()-start_time)/CPS < 3 && threadObj[S.change.to].state==1);
+		// while((clock()-start_time)/CPS < 3 && threadObj[change.to].tid==1);
 		sleep(2);
-		S.change.from = S.change.to;
+		change.from = change.to;
 
-		S.change.to = (S.change.to+1)%N;
-		while(S.status[S.change.to]==2)
-			S.change.to = (S.change.to+1)%N;
+		change.to = (change.to+1)%N;
+		while(status[change.to]==2)
+			change.to = (change.to+1)%N;
 
-		if(threadObj[S.change.from].state!=TERMINATE)
-			pthread_kill(threadObj[S.change.from].tid, SIGUSR1);
+		if(threadObj[change.from].state!=TERMINATE)
+			pthread_kill(threadObj[change.from].tid, SIGUSR1);
 		
 		// if(count_complete()){
 		// 	for(int i=0; i<N; i++){
@@ -217,12 +206,12 @@ void* scheduler(void *param){
 		// 	return NULL;
 		// }
 
-		S.change.flag = 1;
+		change.flag = 1;
 
 		if(count_complete()){
 			for(int i=0;i<N;i++){
 				threadObj[i].state = TERMINATE;
-				S.status[i] = TERMINATE;
+				status[i] = TERMINATE;
 			}
 			break;
 		}
@@ -234,10 +223,10 @@ void* scheduler(void *param){
 void* reporter(void *param){
 
 	while(1){
-		while(!S.change.flag);
-		S.change.flag = 0;
+		while(!change.flag);
+		change.flag = 0;
 		cout<<buffer.size()<<endl;
-		cout<<"Context Switch from "<<threadObj[S.change.from].type<<S.change.from<<" to "<<threadObj[S.change.to].type<<S.change.to<<endl;
+		cout<<"Context Switch from "<<threadObj[change.from].type<<change.from<<" to "<<threadObj[change.to].type<<change.to<<endl;
 		if(count_complete()){
 			completed = 1;
 			cout<<"Process Complete";
@@ -253,17 +242,11 @@ int main() {
 	srand((unsigned)time(NULL));
 
 	//Specifying value of N
-	N = 5;
+	N = 5;MAX = 50;
+	change.flag = 0;
+	change.from = 0;
+	change.to = 0;
 
-	//Specifying value of MAX
-	MAX = 50;
-
-	//initializing status change member
-	S.change.flag = 0;					//flag is 1 iff context switch happens
-	S.change.from = 0;					//context switch from thread index
-	S.change.to = 0;					//context switch to thread index
-
-	//declare N threads
 	threadObj = new myThreads[N];
 
 	//create threads
@@ -271,48 +254,59 @@ int main() {
 		threadObj[i].createMe(i);
 	}
 
-	//initializing the map from thread id to thread index
 	for(int i=0;i<N;i++){
 		myThreads::m[threadObj[i].tid]=threadObj[i].threadNum;
 	}
 
-	//dynamically create status array of STATUS data structure's object S
-	S.status = new int[N];
+	//dynamically create status array
+	status = new int[N];
 
 	//initializing status array to all zeros
 	for(int i=0;i<N;i++){
-		S.status[i] = 0;
+		status[i] = 0;
 	}
 
-	//thread ids for scheduler and reporter threads
 	pthread_t SchId;
 	pthread_t RepId;
-
 	//create scheduler thread
 	pthread_create(&SchId, NULL, scheduler, NULL);
 
 	//create reporter thread
 	pthread_create(&RepId, NULL, reporter, NULL);
 
-	//wait for reporter thread to join main thread
+	cout<<"reached here! 0\n";
+
 	pthread_join(RepId, NULL);
 
-	//wait for scheduler thread to join main thread
+	cout<<"reached here! 1\n";
+
+
 	pthread_join(SchId, NULL);
 
-	//all producer threads have terminated, steady state reached
-	cout<<"\nOnly consumer threads are left!\n";
 
-	//wait for all threads to join the main thread
+	cout<<"reached here! 2\n";
+
+
+	for(int i=0;i<N;i++){
+		cout<<threadObj[i].threadNum<<'\t'<<threadObj[i].state<<'\n';
+		threadObj[i].state = TERMINATE;
+	}
+
+	cout<<"\nOnly consumer threads ae left!\n";
+
+	//join threads
 	for(int i=0;i<N;i++){
 		threadObj[i].join();
 	}
+
+	cout<<"reached here! 3\n";
+
 
 	//delete the dynamic array of threadObj
 	delete threadObj;
 
 	//delete the dynamic array of status
-	delete S.status;
+	delete status;
 
 	return 0;
 }

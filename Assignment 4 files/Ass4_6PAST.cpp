@@ -27,17 +27,13 @@ void sleepOrWake(int);
 //completed will be 1 when all producer threads have terminated and buffer is empty
 int completed = 0;
 
-pthread_mutex_t statusLock;
-pthread_mutex_t buffLock;
-
-
 //N is number of threads
 int N;
 
 int allProd = 0;
 
-//queue buffer to store numbers (items)
-queue<int> buffer;
+//vector buffer to store numbers (items)
+vector<int> buffer;
 
 //structure to hold context switch details
 struct contextSwitch{
@@ -102,10 +98,6 @@ class myThreads{
 			//join thread
 			pthread_join(this->tid, NULL);
 		}
-
-		void unpause(){
-			pthread_kill(this->tid, SIGUSR2);
-		}
 };
 
 myThreads *threadObj;				//threadObj will be a dynamic array of thread objects
@@ -121,7 +113,6 @@ void installSignalHandler(){
 //the function which handles signals
 void sleepOrWake(int signo){
 
-	installSignalHandler();
 	if(signo==SIGUSR1){
 		// cout<<"I am sleeping "<<threadObj[myThreads::m[pthread_self()]].threadNum<<"\n";
 
@@ -130,14 +121,9 @@ void sleepOrWake(int signo){
 		
 		//updating STATUS data structure
 		S.status[myThreads::m[pthread_self()]] = SLEEP;
-		
-		pause();
 	
 	}
 	else if(signo==SIGUSR2){
-
-
-
 		// cout<<"Thanks for waking me up "<<threadObj[myThreads::m[pthread_self()]].threadNum<<"\n";
 
 		//pthread_self() returns the thread id of the calling thread
@@ -147,7 +133,7 @@ void sleepOrWake(int signo){
 		S.status[myThreads::m[pthread_self()]] = RUN;
 	}
 
-	
+	installSignalHandler();
 }
 
 void* doJobs(void *param){
@@ -158,7 +144,6 @@ void* doJobs(void *param){
 	
 	//installing signal handler
 	installSignalHandler();
-	pause();
 
 	//storing thread index in threadObj array in a local variable named num
 	int num = t->threadNum;
@@ -173,10 +158,8 @@ void* doJobs(void *param){
 		while(numsGenerate){
 
 			//while the thread is sleeping, run this loop
-			//while(threadObj[num].state == SLEEP);
-
-
-
+			while(threadObj[num].state == SLEEP);
+			
 			//thread is running
 			if(buffer.size()==MAX){
 
@@ -189,18 +172,14 @@ void* doJobs(void *param){
 			}
 			else {
 
-				pthread_mutex_lock(&buffLock);
-
 				//buffer is a vector, adding produced number to it
-				buffer.push(rand()%100);
+				buffer.push_back(rand()%100);
 
 				//updating numsGenerate var
 				numsGenerate--;
 
-				pthread_mutex_unlock(&buffLock);
-
 				//sleep for sometime, otherwise producer will produce all numbers immediately
-				usleep(1000);
+				usleep(10000);
 			}
 
 		}
@@ -213,7 +192,7 @@ void* doJobs(void *param){
 		//completed will be 1 when all producer threads have terminated and buffer is empty
 		while(completed == 0){
 			
-			// if(threadObj[num].state!=SLEEP){
+			if(threadObj[num].state!=SLEEP){
 
 				//thread is running
 
@@ -227,20 +206,15 @@ void* doJobs(void *param){
 				}
 				else {
 					
-					pthread_mutex_lock(&buffLock);
-
 					//consume a product
 
-					buffer.pop();
+					buffer.pop_back();
 					
-					pthread_mutex_unlock(&buffLock);
-
-
 					//sleep for sometime, otherwise consumer will consume all items
-					usleep(1000);
+					usleep(10000);
 					
 				}
-			//}
+			}
 		}
 	}
 
@@ -360,10 +334,7 @@ void report(){
 void* reporter(void *param){
 
 	while(1){
-
 		while(S.change.flag == 0 && (S.threadTerminated < 0));
-
-		pthread_mutex_lock(&statusLock);
 		
 		if(S.change.flag !=0){
 
@@ -372,11 +343,9 @@ void* reporter(void *param){
 			//restoring change flag's value
 			S.change.flag = 0;
 
-			cout<<"\033[1;32m";
 			//printing buffer size
-			cout<<"Number of elements in the buffer : "<<buffer.size();
+			cout<<"Number of elements in the buffer : "<<buffer.size()<<'\n';
 			
-			cout<<"\033[0m\n";
 			//printing context switch details
 			cout<<"Context Switch from ";
 
@@ -401,12 +370,11 @@ void* reporter(void *param){
 			//SteadyStateReached returns true value only when all producers have terminated and buffer is empty
 			if(SteadyStateReached()){
 				completed = 1;
+				cout<<"Process Complete\n";
 				break;
 			}
 		}
 		else{
-
-			cout<<"\033[1;33m";
 
 			if(threadObj[S.threadTerminated].type == 'P'){
 				cout<<"Producer ";
@@ -415,13 +383,9 @@ void* reporter(void *param){
 				cout<<"Consumer ";
 			}
 
-			cout<<"thread with index : "<<S.threadTerminated<<" terminated!";
-			cout<<"\033[0m\n";
+			cout<<"thread with index : "<<S.threadTerminated<<" terminated! \n";
 			S.threadTerminated = -1;
 		}
-
-		pthread_mutex_unlock(&statusLock);
-
 	}
 
 	return 0;
@@ -431,15 +395,6 @@ int main() {
 	
 	//specifying random seed
 	srand((unsigned)time(NULL));
-
-	if(pthread_mutex_init(&statusLock, NULL)!=0){
-		cout<<"Error in initializing status lock\n";
-		return 0;
-	}
-	if(pthread_mutex_init(&buffLock, NULL)!=0){
-		cout<<"Error in initializing buffer lock\n";
-		return 0;
-	}
 
 	cout<<"Enter number of threads you want : ";
 
@@ -489,29 +444,16 @@ int main() {
 	//wait for scheduler thread to join main thread
 	pthread_join(SchId, NULL);
 
-	cout<<"\033[1;33m";
 	//steady state reached
 	if(allProd==0)
-		cout<<"Only consumer threads are left!";
+		cout<<"\nOnly consumer threads are left!\n";
 	else
-		cout<<"No consumer thread was found! Steady state reached!";
-	cout<<"\033[0m\n";
-
-
-	//wait for all threads to join the main thread
-	for(int i=0;i<N;i++){
-		if(threadObj[i].type=='C')
-			threadObj[i].unpause();
-	}
+		cout<<"\nNo consumer thread was found! Steady state reached!\n";
 
 	//wait for all threads to join the main thread
 	for(int i=0;i<N;i++){
 		threadObj[i].join();
 	}
-
-	cout<<"\033[1;34m";
-	cout<<"Process complete";
-	cout<<"\033[0m\n";
 
 	//delete the dynamic array of threadObj
 	delete threadObj;

@@ -1,0 +1,25 @@
+1. 	We defined a user defined class to handle threads in an object oriented manner.
+2. 	Mutex locks were used to ensure synchronised access to buffers and status array.
+3.	We defined a function called SteadyStateReached which returns true only when all
+	producer threads have terminated and buffer gets empty.
+4.	Our STATUS data structure is defined in a way that it notices any change in context
+	switch and stores that information in itself.
+5.	User defined signals SIGUSR1 and SIGUSR2 are used as per given in the problem
+	statement.
+6.	SIGUSR1 signal is used to put the thread to sleep and SIGUSR2 signal is used to wake
+	up the thread to resume execution.
+7.	C++ Map is used to get threadNum (index of thread in the threadObj array) from its
+	corresponding id.
+8.	The signal handler is installed every time the corresponding function sleepOrWake is
+	called.
+9.	ASCII escape characters are used to print colorful text on the screen to make the
+	output look better.
+10.	The total number of pseudorandom numbers to be generated and the maximum buffer size
+	parameters are defined as macros.
+11.	The implementation of producer and consumer is done in the following manner:
+	While the state is sleep, both keep waiting on a while loop, once the state is changed
+	to run, the producer checks whether the buffer is full or not, if there is some space
+	left, producer adds the item to the buffer and for consumer, if the buffer isn't empty,
+	it removes the item from the buffer. Some usleep is given so as not to add or remove items
+	immediately.
+12.	The code is well commented to enhance is readability.

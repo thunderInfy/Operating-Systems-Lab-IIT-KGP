@@ -14,6 +14,11 @@ struct messageBuffer{
 	pid_t pid;
 };
 
+struct schedMsgContainer{
+	long mesg_type;
+	string mesg;
+};
+
 int main(int argc, char* argv[]){
 
 	//parameters (MQ1, MQ2, k)

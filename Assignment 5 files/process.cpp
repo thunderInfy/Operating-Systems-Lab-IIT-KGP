@@ -48,7 +48,7 @@ int main(int argc, char* argv[]){
 	signal(SIGUSR1, handleSignal);
 
 	int mq1_id, mq3_id;
-	pid myID = getpid();
+	pid_t myID = getpid();
 
 	//argv[1] contains page reference string
 	

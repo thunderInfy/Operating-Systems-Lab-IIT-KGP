@@ -146,29 +146,32 @@ int main(int argc, char* argv[]){
 		exit(-1);
 	}
 
-	string sm1Str, sm2Str, sm3Str, mq1Str, mq2Str, mq3Str;
+	string sm1Str, sm2Str, sm3Str, mq1Str, mq2Str, mq3Str, KStr;
 	sm1Str = to_string(sm1_id);
 	sm2Str = to_string(sm2_id);
 	sm3Str = to_string(sm3_id);
 	mq1Str = to_string(mq1_id);
 	mq2Str = to_string(mq2_id);
 	mq3Str = to_string(mq3_id);
+	KStr = to_string(k);
 
 	pid_t scheduler = fork();
 
 	if(scheduler == 0){
 		// 	Creates the Scheduler module
-		// 	A separate Linux process for scheduling the Process-es from ready queue (MQ1). It passes the parameters (MQ1, MQ2) via command-line arguments during process creation.
-		char** args = new char*[4];
+		// 	A separate Linux process for scheduling the Process-es from ready queue (MQ1). It passes the parameters (MQ1, MQ2, k) via command-line arguments during process creation.
+		char** args = new char*[5];
 
 		args[0] = new char[15];					//for ./sched
 		args[1] = new char[mq1Str.size()+1];	//for mq1Str
 		args[2] = new char[mq2Str.size()+1];	//for mq2Str
-		args[3] = NULL;
+		args[3] = new char[KStr.size()+1];		//for KStr
+		args[4] = NULL;
 
 		strcpy(args[0],"./sched");
 		strcpy(args[1],mq1Str.c_str());
 		strcpy(args[2],mq2Str.c_str());
+		strcpy(args[3],KStr.c_str());
 
 		//calling scheduler
 		if(execvp(args[0], args)<0){

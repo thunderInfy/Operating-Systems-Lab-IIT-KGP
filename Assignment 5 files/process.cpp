@@ -5,7 +5,10 @@
 #include <unistd.h>			//for getpid
 #include <sys/ipc.h>		//for msgsnd
 #include <sys/msg.h>		//for msgsnd
-
+#include <vector>			//for vector
+#include <sstream>			//for stringstream
+#include <string>			//for string
+#include <signal.h>			//for signal, SIGUSR1
 
 using namespace std;
 
@@ -14,6 +17,14 @@ struct messageBuffer{
 	pid_t pid;
 };
 
+int isSignalReceived = 0;
+
+void handleSignal(int sig){
+	if(sig == SIGUSR1){
+		//do nothing, SIGUSR1 which was sent by scheduler in our code has woken up process
+		isSignalReceived = 1;
+	}
+}
 
 int main(int argc, char* argv[]){
 
@@ -24,19 +35,35 @@ int main(int argc, char* argv[]){
 		exit(-1);
 	}
 
+	//installing signal handler
+	signal(SIGUSR1, handleSignal);
+
 	int mq1_id, mq3_id;
 
 	//argv[1] contains page reference string
 	
-	mq1_id = atoi(argv[2]);			//ready queue
+	string pageRefStr(argv[1]);			//pageRefStr contains C++ style string corresponding to argv[1]
+	mq1_id = atoi(argv[2]);				//ready queue
 	mq3_id = atoi(argv[3]);
+
+	vector <int> pageNumVec;			//vector to store page numbers from page reference string
+	stringstream buffer(pageRefStr);	//buffer is the string stream here
+	string temp;
+
+	while(getline(buffer, temp, ',')){
+		pageNumVec.push_back(atoi(temp.c_str()));
+	}
 
 	messageBuffer mesg;
 	mesg.mesg_type = 1;
 	mesg.pid = getpid();
 
 	//adding current process to ready queue
-    //msgsnd(mq1_id, &mesg, sizeof(mesg), 0);
+    msgsnd(mq1_id, &mesg, sizeof(mesg), 0);
+
+    //pausing process if signal is not yet received
+    if(isSignalReceived == 0)
+ 	   pause();
 
 	/*
 	Process: 

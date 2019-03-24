@@ -270,8 +270,9 @@ int main(int argc, char* argv[]){
 	kill(scheduler, SIGKILL);
 	kill(mmu, SIGKILL);
 
+	//wait for all processes so that they do not remain zombie processes for long
 	for(int i=0; i<k ; i++){
-		kill(Process_es[i], SIGKILL);
+		wait(NULL);
 	}
 
 	if(shmdt((const void *)processPageMap) < 0){

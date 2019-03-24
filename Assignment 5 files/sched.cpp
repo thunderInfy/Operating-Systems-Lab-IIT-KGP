@@ -6,7 +6,6 @@
 #include <unistd.h>		//for getppid
 #include <sys/ipc.h>	//for msgrcv
 #include <sys/msg.h>	//for msgrcv
-#include <signal.h>
 
 using namespace std;
 
@@ -40,14 +39,16 @@ int main(int argc, char* argv[]){
 		//Initially when the ready queue is empty, it waits on the ready queue (MQ1).
 		//Once a process gets added, it starts scheduling. 
 		//It selects the first process from ready queue.
-		//Removes it from the queue.
+		//Removes it from the queue
 		msgrcv(mq1_id,&mesg,sizeof(mesg),1,0);			//msgrcv is blocking
 
 		//Sends it a signal for starting execution
 		kill(mesg.pid, SIGUSR1);
+
+		//Then the scheduler blocks itself till it gets notification message from MMU. It can receive two types of message from MMU
+		//msgrcv(mq2_id)
 	}
   
-	// 	Then the scheduler blocks itself till gets notification message from MMU. It can receive two types of message from MMU:
 	// 		Type I message “PAGE FAULT HANDLED”:
 	// 			After successful page-fault handling.
 	// 			After getting this signal:

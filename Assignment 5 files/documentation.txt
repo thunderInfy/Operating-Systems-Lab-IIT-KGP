@@ -1,0 +1,117 @@
+Required to simulate a demand-paged virtual memory management system.  
+Page Reference String
+	In a typical operating system, processes arrive in the system and they are scheduled for execution by the scheduler. Once a process is allocated CPU, it starts execution whereby the CPU generates a sequence of virtual addresses. The corresponding sequence of virtual page numbers is referred to as the page reference string. 
+Once a virtual address (page number) is generated, it is given to the Memory Management Unit (MMU) to determine the corresponding physical address (frame number) in memory. 
+In order to determine the frame number, it consults the translation lookaside buffer (TLB), in the event of a miss, it consults the page table.
+Page Present in Main memory: 
+	The current process can continue its execution.
+Otherwise: 
+	A page fault occurs and the requested page must be brought from disk to main memory (i.e. an I/O operation). During this time, the scheduler takes the CPU away from current process, puts it to waiting state, and schedules another process. 
+	Meanwhile the page-fault handling interrupt service routine (ISR) associated with the MMU performs the following: 
+	Checks if there is any free frame in main memory. 
+		If yes: 
+			It loads the page into this frame. 
+		Otherwise: 
+			It identifies a victim page using Least Recently Used (LRU) page-replacement algorithm, removes the victim page from memory, and brings in the new page. 
+	Once the page-fault is handled, the process comes out of the waiting state and gets added to the ready queue so that the scheduler can select it again. 
+
+Inputs to the program:
+	1) Total number of processes (k)
+	2) Virtual address space – maximum number of pages required per process (m)
+	3) Physical address space – total number of frames in main memory (f)
+	4) Size of the TLB (s)
+
+Modules:
+	Master (Inputs: k, m, f):
+		Creates and initializes different data structures:
+			Page Table:
+				Implemented using shared memory (SM1).
+				There will be one page table for each process, where the size of each page table is same as the virtual address space.
+					Each entry in page table contains < frame_number, valid/invalid bit >.
+					Initially, all frame numbers are equal to -1.
+			Free Frame List:
+				Implemented using shared memory (SM2).
+				This will contain a list of all free frames in main memory, and will be used by MMU.
+			Ready Queue:
+				This queue is used by the scheduler, and is to be implemented using message queue (MQ1).
+			More Message Queues:
+				MQ2:
+					For communication between Scheduler and MMU.
+				MQ3:
+					For communication between Process-es and MMU.
+
+		Creates the Scheduler module: 
+			A separate Linux process for scheduling the Process-es from ready queue (MQ1). It passes the parameters (MQ1, MQ2) via command-line arguments during process creation.
+
+		Creates the MMU module:
+			A separate Linux process for translating page numbers to frame numbers and to handle page faults. It passes the parameters (MQ2, MQ3, SM1, SM2) via command line arguments during process creation.
+
+		Creates k number of Process-es: 
+			As separate Linux processes at fixed interval of time (250 ms). Generates the page reference string (R i) for every process (P i) and passes the same via command line argument during process creation. It also passes the parameters (MQ1, MQ3) to every process.
+
+			Selects a random number between (1,m) and assigns it as the required number of pages for a particular process and allocates frames proportionately.
+
+			Process to page number mapping:
+				Can be implemented using shared memory.
+				It contains the number of pages required by every process.
+
+			Generation of page reference string:
+				For process Pi, randomly select mi, then:
+					Length of reference string for Pi:
+						Randomly select between 2*mi and 10*mi.
+
+		Receives notification from scheduler about termination:
+			Terminates Scheduler, MMU and then terminates itself.
+	Scheduler:
+		Schedules various processes using FCFS algorithm.
+			Continuously scans the ready queue and selects processes in FCFS order for scheduling. 
+			Initially when the ready queue is empty, it waits on the ready queue (MQ1).
+			Once a process gets added, it starts scheduling: 
+				It selects the first process from ready queue.
+				Removes it from the queue. 
+				Sends it a signal for starting execution. 
+				Then the scheduler blocks itself till gets notification message from MMU. It can receive two types of message from MMU:
+					Type I message “PAGE FAULT HANDLED”:
+						After successful page-fault handling.
+						After getting this signal:
+							It enqueues the current process and schedules the first process from the Ready queue.
+ 					Type II message “TERMINATED”:
+ 						After successful termination of process.
+						After getting this signal: 
+							It schedules the first process from Ready queue.
+		Notifies Master after all processes have finished execution.
+	MMU:
+		Translates the page number to frame number and handles page-fault, and also manages the page table.
+			Master creates MMU and then MMU pauses. 
+			MMU wakes up after receiving the page number via message queue (MQ3) from Process.
+			It receives the page number from the process and checks the TLB, failing which, it checks the page table for the corresponding process. There can be following two cases:
+				If the page is already in page table, MMU sends back the corresponding frame number to the process.
+				Else in case of page fault
+					Sends -1 to the process as frame number
+					Invokes the page fault handler to handle the page fault
+						If free frame available
+							updates the page table and also updates the corresponding free-frame list.
+						Else 
+							Does local page replacement. Select victim page using LRU, replace it and brings in a new frame and update the page table.
+					Intimates the Scheduler by sending Type I message to enqueue the current process and schedule the next process.
+			If MMU receives the page number -9 via message queue: 
+				Infers that the process has completed its execution.
+				Updates the free-frame list.
+				Releases all allocated frames.
+				Sends Type II message to the Scheduler for scheduling the next process.
+		Maintains a global timestamp (count), which is incremented by 1 after every page reference.
+	Process: 
+		Execution of process means generation of page numbers from reference string. 
+		Sends the page number to MMU using message queue (MQ3) and receives the frame number from MMU.
+			If MMU sends a valid frame number:
+				It parses the next page number in the reference string and goes in loop.
+			Else, in case of page fault:
+				Gets -1 as frame number from MMU.
+				Saves the current element of the reference string for continuing its execution when it is scheduled next. 
+				Goes into wait(). MMU invokes page fault handling routine to handle the page fault. 
+					Note : The current process is out of Ready queue and Scheduler enqueues it to the Ready queue once page fault is resolved.
+			Else, in case of invalid page reference:
+				It gets -2 as frame number from MMU and terminates itself. 
+				The MMU informs the scheduler to schedule the next process.
+		When the Process completes the scanning of the reference string, it sends -9 (marker to denote end of page reference string) to the MMU.
+		MMU will notify the Scheduler.

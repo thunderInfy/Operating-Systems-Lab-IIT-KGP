@@ -6,6 +6,7 @@
 #include <unistd.h>		//for getppid
 #include <sys/ipc.h>	//for msgrcv
 #include <sys/msg.h>	//for msgrcv
+#include <cstring>		//for strcpy
 
 using namespace std;
 
@@ -16,7 +17,7 @@ struct messageBuffer{
 
 struct schedMsgContainer{
 	long mesg_type;
-	string mesg;
+	char mesg[30];
 };
 
 int main(int argc, char* argv[]){
@@ -34,12 +35,15 @@ int main(int argc, char* argv[]){
 	mq2_id = atoi(argv[2]);
 	k = atoi(argv[3]);				//k is number of processes
 
-	int i = 0;
+	int counter = 0;
 
-	while(i < k){
+	while(counter < k){
+
+		messageBuffer mesg;
+		schedMsgContainer schMsgC;
+
 		//Schedules various processes using FCFS algorithm.
 		//Continuously scans the ready queue and selects processes in FCFS order for scheduling		
-		messageBuffer mesg;
 
 		//Initially when the ready queue is empty, it waits on the ready queue (MQ1).
 		//Once a process gets added, it starts scheduling. 
@@ -51,18 +55,25 @@ int main(int argc, char* argv[]){
 		kill(mesg.pid, SIGUSR1);
 
 		//Then the scheduler blocks itself till it gets notification message from MMU. It can receive two types of message from MMU
-		//msgrcv(mq2_id)
-	}
-  
-	// 		Type I message “PAGE FAULT HANDLED”:
-	// 			After successful page-fault handling.
-	// 			After getting this signal:
-	// 				It enqueues the current process and schedules the first process from the Ready queue.
-	// 		Type II message “TERMINATED”:
- 	// 			After successful termination of process.
-	// 			After getting this signal: 
-	// 				It schedules the first process from Ready queue.
+		msgrcv(mq2_id,&schMsgC,sizeof(schMsgC),1,0);
 
+		if(strcmp(schMsgC.mesg,"PAGE FAULT HANDLED") == 0){
+
+			//Type I message “PAGE FAULT HANDLED”:
+			//	After successful page-fault handling.
+			// 	After getting this signal:
+			// 		It enqueues the current process and schedules the first process from the Ready queue.
+			mesg.mesg_type = 1;
+			msgsnd(mq1_id,&mesg,sizeof(mesg),0);
+		}
+		else{
+			//Type II message “TERMINATED”:
+ 			//	After successful termination of process.
+			//	After getting this signal: 
+			//		It schedules the first process from Ready queue.
+			counter++;
+		}
+	}
 
 	//Notifies Master after all processes have finished execution
 	pid_t masterPID = getppid();

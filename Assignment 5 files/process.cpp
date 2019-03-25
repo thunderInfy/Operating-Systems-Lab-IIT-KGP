@@ -50,8 +50,6 @@ int main(int argc, char* argv[]){
 	int mq1_id, mq3_id;
 	pid_t myID = getpid();
 
-	//argv[1] contains page reference string
-	
 	string pageRefStr(argv[1]);			//pageRefStr contains C++ style string corresponding to argv[1]
 	mq1_id = atoi(argv[2]);				//ready queue
 	mq3_id = atoi(argv[3]);
@@ -62,6 +60,13 @@ int main(int argc, char* argv[]){
 
 	while(getline(buffer, temp, ',')){
 		pageNumVec.push_back(atoi(temp.c_str()));
+	}
+
+	int N = pageNumVec.size();
+
+	int useArr[N];
+	for(int i=0; i<N; i++){
+		useArr[i] = pageNumVec[i];
 	}
 
 	messageBuffer mesg;
@@ -77,13 +82,14 @@ int main(int argc, char* argv[]){
 
  	msgPageFrameBuffer msgPFB;
 
- 	for(int i=0; i<pageNumVec.size(); ){
+ 	for(int i=0; i<N; ){
 
 	 	//Execution of process means generation of page numbers from reference string 
 
  		msgPFB.mesg_type = 1;
  		msgPFB.pid = myID;
-		msgPFB.data = pageNumVec[i];
+
+		msgPFB.data = useArr[i];
 
 	 	//Sends the page number to MMU using message queue (MQ3)
 	 	msgsnd(mq3_id, &msgPFB, sizeof(msgPFB), 0);
@@ -91,18 +97,22 @@ int main(int argc, char* argv[]){
 	 	//Receives the frame number from MMU with message type myID = getpid()
 		msgrcv(mq3_id, &msgPFB, sizeof(msgPFB), myID, 0);
 
+		// cout<<useArr[i]<<" "<<msgPFB.data<<'\n';
+		// fflush(stdout);
+
 		if(msgPFB.data >= 0){
 			// 	If MMU sends a valid frame number:
 			// 		It parses the next page number in the reference string and goes in loop.
 			i++;
 		}
 		else if(msgPFB.data == -1){
+
 			// 	Else, in case of page fault:
 			// 		Gets -1 as frame number from MMU.
 			// 		Saves the current element of the reference string for continuing its execution when it is scheduled next. 
 			// 		Goes into wait(). MMU invokes page fault handling routine to handle the page fault. 
 			// 			Note : The current process is out of Ready queue and Scheduler enqueues it to the Ready queue once page fault is resolved.
-			pause();
+			pause();	
 		}
 		else if(msgPFB.data == -2){
 			// 	Else, in case of invalid page reference:
@@ -122,6 +132,6 @@ int main(int argc, char* argv[]){
 
 	//Sends the page number to MMU using message queue (MQ3)
 	msgsnd(mq3_id, &msgPFB, sizeof(msgPFB), 0);
-	
+
 	return 0;
 }

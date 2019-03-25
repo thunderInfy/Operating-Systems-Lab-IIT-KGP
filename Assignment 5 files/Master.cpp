@@ -46,6 +46,7 @@ void handleSignal(int sig){
 
 int main(int argc, char* argv[]){
 
+
 	//Inputs:
 	//1) Total number of processes (k)
 	//2) Virtual address space – maximum number of pages required per process (m)
@@ -298,9 +299,9 @@ int main(int argc, char* argv[]){
 	kill(mmu, SIGKILL);
 
 	//wait for all processes so that they do not remain zombie processes for long
-	for(int i=0; i<k ; i++){
-		wait(NULL);
-	}
+	// for(int i=0; i<k ; i++){
+	// 	wait(NULL);
+	// }
 	
 	//to destroy the shared memory
 	shmctl(sm1_id,IPC_RMID,NULL);

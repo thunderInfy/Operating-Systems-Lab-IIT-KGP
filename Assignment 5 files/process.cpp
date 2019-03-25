@@ -80,6 +80,8 @@ int main(int argc, char* argv[]){
     if(isSignalReceived == 0)
  	   pause();
 
+ 	isSignalReceived = 0;
+
  	msgPageFrameBuffer msgPFB;
 
  	for(int i=0; i<N; ){
@@ -112,7 +114,10 @@ int main(int argc, char* argv[]){
 			// 		Saves the current element of the reference string for continuing its execution when it is scheduled next. 
 			// 		Goes into wait(). MMU invokes page fault handling routine to handle the page fault. 
 			// 			Note : The current process is out of Ready queue and Scheduler enqueues it to the Ready queue once page fault is resolved.
-			pause();	
+			if(isSignalReceived == 0)
+				pause();
+
+			isSignalReceived = 0;	
 		}
 		else if(msgPFB.data == -2){
 			// 	Else, in case of invalid page reference:

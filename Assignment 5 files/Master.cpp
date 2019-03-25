@@ -192,30 +192,36 @@ int main(int argc, char* argv[]){
 	if(mmu == 0){
 		// 	Creates the MMU module
 		// 	A separate Linux process for translating page numbers to frame numbers and to handle page faults. It passes the parameters (MQ2, MQ3, SM1, SM2, SM3, k, m, f, s) via command line arguments during process creation.
-		char** args = new char*[11];
+		char** args = new char*[14];
 
-		args[0] = new char[10];					//for ./MMU
-		args[1] = new char[mq2Str.size()+1];	//for mq2Str
-		args[2] = new char[mq3Str.size()+1];	//for mq3Str
-		args[3] = new char[sm1Str.size()+1];	//for sm1Str
-		args[4] = new char[sm2Str.size()+1];	//for sm2Str
-		args[5] = new char[sm3Str.size()+1];	//for sm3Str
-		args[6] = new char[KStr.size()+1];		//for KStr
-		args[7] = new char[MStr.size()+1];		//for MStr
-		args[8] = new char[FStr.size()+1];		//for FStr
-		args[9] = new char[SStr.size()+1];		//for SStr
-		args[10] = NULL;
+		args[0] = new char[10];					//for xterm
+		args[1] = new char[10];					//for -hold
+		args[2] = new char[5];					//for -e
+		args[3] = new char[10];					//for ./MMU
+		args[4] = new char[mq2Str.size()+1];	//for mq2Str
+		args[5] = new char[mq3Str.size()+1];	//for mq3Str
+		args[6] = new char[sm1Str.size()+1];	//for sm1Str
+		args[7] = new char[sm2Str.size()+1];	//for sm2Str
+		args[8] = new char[sm3Str.size()+1];	//for sm3Str
+		args[9] = new char[KStr.size()+1];		//for KStr
+		args[10] = new char[MStr.size()+1];		//for MStr
+		args[11] = new char[FStr.size()+1];		//for FStr
+		args[12] = new char[SStr.size()+1];		//for SStr
+		args[13] = NULL;
 
-		strcpy(args[0],"./MMU");
-		strcpy(args[1],mq2Str.c_str());
-		strcpy(args[2],mq3Str.c_str());
-		strcpy(args[3],sm1Str.c_str());
-		strcpy(args[4],sm2Str.c_str());
-		strcpy(args[5],sm3Str.c_str());
-		strcpy(args[6],KStr.c_str());
-		strcpy(args[7],MStr.c_str());
-		strcpy(args[8],FStr.c_str());
-		strcpy(args[9],SStr.c_str());
+		strcpy(args[0],"xterm");
+		strcpy(args[1],"-hold");
+		strcpy(args[2],"-e");
+		strcpy(args[3],"./MMU");
+		strcpy(args[4],mq2Str.c_str());
+		strcpy(args[5],mq3Str.c_str());
+		strcpy(args[6],sm1Str.c_str());
+		strcpy(args[7],sm2Str.c_str());
+		strcpy(args[8],sm3Str.c_str());
+		strcpy(args[9],KStr.c_str());
+		strcpy(args[10],MStr.c_str());
+		strcpy(args[11],FStr.c_str());
+		strcpy(args[12],SStr.c_str());
 
 		//calling mmu
 		if(execvp(args[0], args)<0){

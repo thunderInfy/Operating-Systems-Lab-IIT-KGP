@@ -399,7 +399,7 @@ int main(int argc, char* argv[]){
 
 						//Invokes the page fault handler to handle the page fault
 						HandlePageFault(msgPFB.data, msgPFB.pid);						
-
+						
 						// 	Intimates the Scheduler by sending Type I message to enqueue the current process and schedule the next process.
 
 						schMsgC.mesg_type = 1;

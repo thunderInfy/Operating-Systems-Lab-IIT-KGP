@@ -370,12 +370,32 @@ int my_open(char* filename){
 
 	updateOpenFileTable(dirEnt, numBlocks, block_size, openFileTableOffset);
 
-	return openFileTableOffset;;
+	return openFileTableOffset;
 }
 
 // closes an already opened file
-void my_close(){
+int my_close(unsigned int fd){
 
+	unsigned int numBlocks;
+	unsigned int file_sys_size;
+	unsigned int block_size;
+
+	//reading file_sys_size from disk
+	disk->readInfo(0, FILE_SYS_SIZE_OFFSET, &file_sys_size, sizeof(file_sys_size));
+
+	//reading block_size from disk
+	disk->getBlockSize(block_size);
+
+	getNumBlocks(file_sys_size, block_size, numBlocks);
+
+	if(fd >= block_size*1024){
+		return -1; 
+	}
+
+	openFileTableEntry temp;
+	disk->writeInfo(numBlocks-1, block_size, fd, (const void*)&temp, sizeof(temp));
+
+	return 0;
 }
 
 // reads data from an already open file
@@ -510,8 +530,11 @@ int main(){
 	// generateFileSystem(32, 16);
 	// my_chdir((char*)"home");
 	// printf("%d\n",my_open((char*)"hey"));
+	// my_close(0);
 	// printf("%d\n",my_open((char*)"hey"));
 	// printf("%d\n",my_open((char*)"hey2"));
-
+	// my_close(0);
+	// printf("%d\n",my_open((char*)"hey2"));
+	
 	return 0;
 }

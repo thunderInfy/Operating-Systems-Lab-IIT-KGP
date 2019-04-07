@@ -12,24 +12,15 @@
 #define DIRECTORY_INFO_MEMORY_ALLOCATION		16
 
 struct memory{
-	char* space;							//the entire memory that we would use
-	unsigned long long numBlocks;			//total number of blocks as we would get from the input
-	unsigned int block_size;				//block size as we would get
-	unsigned int file_sys_size;				//file system size as we would get
-	unsigned long long numBytesBitVec;		//number of bytes reserved for bit vector
+	char* space;							//the entire memory that we would use		
 
 	//constructor
 	memory(unsigned int file_sys_size ,unsigned long long numBlocks, unsigned int block_size){
 
-		this->file_sys_size = file_sys_size;
-		this->numBlocks = numBlocks;
-		this->block_size = block_size;
+		unsigned long long numBytesBitVec;					//number of bytes reserved for bit vector
+		getNumBytesBitVec(numBlocks, numBytesBitVec);
 
-		this->numBytesBitVec = numBlocks/8;
-		if(numBlocks%8!=0)
-			(this->numBytesBitVec)++;
-
-		if(BIT_VECTOR_OFFSET + this->numBytesBitVec + DIRECTORY_INFO_MEMORY_ALLOCATION >= block_size){
+		if(BIT_VECTOR_OFFSET + numBytesBitVec + DIRECTORY_INFO_MEMORY_ALLOCATION >= block_size){
 			//8 is for directory pointer, atleast one directory will be there
 			perror("Block size is incapable of holding super block contents!");
 			exit(-1);
@@ -46,59 +37,42 @@ struct memory{
 		space = (char*)malloc(numBlocks * block_size * 1024);
 	}
 
-	void clearBlockContents(unsigned long long blockNum){
-
-		checkValidityBlock(blockNum);
-		bzero((void*)(space + blockNum*(this->block_size)), this->block_size);
-
+	void getNumBytesBitVec(unsigned long long numBlocks, unsigned long long &numBytesBitVec){
+		numBytesBitVec = numBlocks/8;
+		
+		if(numBlocks%8!=0)
+			(numBytesBitVec)++;
 	}
 
-	void writeInfo(unsigned long long blockNum, unsigned int offset, const void *src, size_t n){
-
-		checkValidityBlock(blockNum);
-		checkValidityOffset(offset);
-		memcpy((void*)(space + blockNum*(this->block_size) + offset),src,n);
-
+	void clearBlockContents(unsigned long long blockNum, unsigned int block_size){
+		bzero((void*)(space + blockNum*(block_size)), block_size);
 	}
 
-	void checkValidityBlock(unsigned long long blockNum){
-
-		if(blockNum >= (this->numBlocks)){
-			perror("Invalid block index");
-			exit(-1);
-		}
-
+	void writeInfo(unsigned long long blockNum, unsigned int block_size, unsigned int offset, const void *src, size_t n){
+		memcpy((void*)(space + blockNum*block_size + offset),src,n);
 	}
 
-	void checkValidityOffset(unsigned int offset){
-
-		if(offset >= (this->block_size)){
-			perror("Invalid offset specified");
-			exit(-1);
-		}
-
+	void readInfo(unsigned long long blockNum, unsigned int block_size, unsigned int offset, void *dest, size_t n){
+		memcpy(dest,(const void *)(space + blockNum*block_size + offset),n);
 	}
+
 
 	void updateBitVector_occupy(unsigned long long blockNum){
-
-		checkValidityBlock(blockNum);
-
 		this->space[BIT_VECTOR_OFFSET + blockNum/8] |= (1<<(7-blockNum%8));
-
 	}
 
 	void updateBitVector_free(unsigned long long blockNum){
-
-		checkValidityBlock(blockNum);
-
 		this->space[BIT_VECTOR_OFFSET + blockNum/8] &= ~(1<<(7-blockNum%8));
 	}
 
 	//function to create the super block
-	void createSuperBlock(){
+	void createSuperBlock(unsigned int file_sys_size, unsigned long long numBlocks, unsigned int block_size){
+
+		unsigned long long numBytesBitVec;
+		getNumBytesBitVec(numBlocks, numBytesBitVec);
 
 		//clear block 0 where super block will be stored
-		this->clearBlockContents(0);
+		this->clearBlockContents(0, block_size);
 
 		// Block 0 is the super block which contains:
 		//		Name of variable 						|	Offset
@@ -117,43 +91,45 @@ struct memory{
 		char dirName[8];
 
 		//block number where directory is stored
-		unsigned long long blockNumber = this->numBlocks - 1;
+		unsigned long long blockNumber = numBlocks - 1;
 
 		strcpy(volName, "root");
 		strcpy(dirName, "home");
 
 		//storing block size at block size offset
-		this->writeInfo(0, BLOCK_SIZE_OFFSET, (const void *)&(this->block_size), sizeof(this->block_size));
+		this->writeInfo(0, block_size, BLOCK_SIZE_OFFSET, (const void *)&(block_size), sizeof(block_size));
 		
 		//storing file system size at the respective offset
-		this->writeInfo(0, FILE_SYS_SIZE_OFFSET, (const void *)&(this->file_sys_size), sizeof(this->file_sys_size));
+		this->writeInfo(0, block_size, FILE_SYS_SIZE_OFFSET, (const void *)&(file_sys_size), sizeof(file_sys_size));
 
 		//storing volume name at the respective offset
-		this->writeInfo(0, VOLUME_NAME_OFFSET, (const void *)&(volName), 8);
+		this->writeInfo(0, block_size, VOLUME_NAME_OFFSET, (const void *)&(volName), 8);
 		
 		//storing directory name at the respective offset
-		this->writeInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec, (const void *)&(dirName),DIRECTORY_INFO_MEMORY_ALLOCATION/2);
+		this->writeInfo(0, block_size, BIT_VECTOR_OFFSET + numBytesBitVec, (const void *)&(dirName),DIRECTORY_INFO_MEMORY_ALLOCATION/2);
 
 		//storing blockNumber of the home directory at the respective offset
-		this->writeInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec + DIRECTORY_INFO_MEMORY_ALLOCATION/2, (const void *)&(blockNumber),DIRECTORY_INFO_MEMORY_ALLOCATION/2);
+		this->writeInfo(0, block_size, BIT_VECTOR_OFFSET + numBytesBitVec + DIRECTORY_INFO_MEMORY_ALLOCATION/2, (const void *)&(blockNumber),DIRECTORY_INFO_MEMORY_ALLOCATION/2);
 
 	}
 
 	//function to initialize FAT in block 1
-	void initializeFAT(){
+	void initializeFAT(unsigned int block_size){
+
+		//occupy block 1
+		updateBitVector_occupy(1);
 
 		// The data blocks of a file are maintained using a system-wide File Allocation Table (FAT)
 		// It will be stored in Block-1.
 
 		long long value = -1;
-		int Offset = 0;
+		unsigned int Offset = 0;
 
 		//put value -1 for all FAT values
-		for(;Offset<(this->block_size); Offset+=sizeof(long long))
-			this->writeInfo(1, Offset, (const void*)&value, sizeof(long long));
+		for(;Offset<block_size; Offset+=sizeof(long long))
+			this->writeInfo(1, block_size, Offset, (const void*)&value, sizeof(long long));
 
 	}
-
 };
 
 memory *disk;
@@ -175,15 +151,56 @@ void generateFAT(unsigned int file_sys_size, unsigned int block_size){
 	disk = new memory(file_sys_size, numBlocks, block_size);
 
 	//create super block
-	disk->createSuperBlock();
+	disk->createSuperBlock(file_sys_size, numBlocks, block_size);
 
 	//intialize FAT
-	disk->initializeFAT();
+	disk->initializeFAT(block_size);
 
 }
 
+// opens a file for reading/writing (create if not existing)
 void my_open(){
 
+}
+
+// closes an already opened file
+void my_close(){
+
+}
+
+// reads data from an already open file
+void my_read(){
+
+}
+
+// writes data into an already open file
+void my_write(){
+
+}
+
+// creates a new directory
+void my_mkdir(){
+
+}
+
+// changes the working directory
+void my_chdir(){
+
+}
+
+// removes a directory along with all its contents
+void my_rmdir(){
+
+}
+
+// copies a file between Linux file system and your file system
+void my_copy(){
+	
+}
+
+// displays the contents of the specified file
+void my_cat(){
+	
 }
 
 int main(){

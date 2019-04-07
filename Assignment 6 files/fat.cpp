@@ -1,38 +1,45 @@
 // Objective : Implement a memory-resident file system in a memory block
-// Assumptions : 
-//		Maximum 2^64 blocks
 
 #include <cstdlib>		//for malloc, exit
 #include <cstdio>		//for perror
 #include <strings.h>	//for bzero
 #include <string.h>		//for memcpy
 
-#define BLOCK_SIZE_OFFSET 			0
-#define FILE_SYS_SIZE_OFFSET		8
-#define VOLUME_NAME_OFFSET			16
-#define BIT_VECTOR_OFFSET			24
-#define DIRECTORY_POINTER_OFFSET 	32
+#define BLOCK_SIZE_OFFSET 						0
+#define FILE_SYS_SIZE_OFFSET					8
+#define VOLUME_NAME_OFFSET						16
+#define BIT_VECTOR_OFFSET						24
+#define DIRECTORY_POINTER_MEMORY_ALLOCATION		8
 
 struct memory{
 	char* space;
 	unsigned long long numBlocks;
 	unsigned int block_size;
 	unsigned int file_sys_size;
+	unsigned long long numBytesBitVec;
 	char volumeName[8];
-	unsigned long long bitVector;
 
 	memory(unsigned int file_sys_size ,unsigned long long numBlocks, unsigned int block_size){
 
 		this->file_sys_size = file_sys_size;
 		this->numBlocks = numBlocks;
 		this->block_size = block_size;
-		this->bitVector = 0;
+		this->numBytesBitVec = numBlocks/8;
+
+		if(numBlocks%8!=0)
+			(this->numBytesBitVec)++;
+
+		if(BIT_VECTOR_OFFSET + this->numBytesBitVec + DIRECTORY_POINTER_MEMORY_ALLOCATION >= block_size){
+			//8 is for directory pointer, atleast one directory will be there
+			perror("Block size is incapable of holding super block contents!");
+			exit(-1);
+		}
 
 		// Simulate the disk as a set of contiguous blocks in memory
 		space = (char*)malloc(numBlocks * block_size * 1024);
 	}
 
-	void clearBlock(unsigned long long blockNum){
+	void clearBlockContents(unsigned long long blockNum){
 
 		checkValidityBlock(blockNum);
 		bzero((void*)(space + blockNum*(this->block_size)), this->block_size);
@@ -71,14 +78,14 @@ struct memory{
 	}
 
 	void updateBitVector_free(unsigned long long blockNum){
-		
+
 
 	}
 
 	void createSuperBlock(){
 
 		//clear block 0 where super block will be stored
-		this->clearBlock(0);
+		this->clearBlockContents(0);
 
 		// Block 0 is the super block which contains:
 		//		Name of variable 						|	Offset
@@ -86,13 +93,13 @@ struct memory{
 		// 		Size of the file system in MB 			|	8
 		// 		Volume name								|	16
 		// 		Bit vector 								|	24
-		// 		Pointer(s) to the directory(ies).		|	32
+		// 		Pointer(s) to the directory(ies).		|	defined later
 
 		//specifying volume name
 		strcpy(this->volumeName, "root");
 
 		// The free blocks are maintained as a bit vector stored in the super block. 
-		// The number of bits will be equal to the number of blocks in the file system. 
+		// The number of bits will be equal to the number of blocks in the file system.
 		// If the i-th bit is 0, then block i is free; else, it is occupied.
 
 

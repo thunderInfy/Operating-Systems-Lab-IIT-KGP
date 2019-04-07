@@ -10,7 +10,7 @@ Features of the file system:
 			Contains relevant information about the file system like:
 				Block size
 				Size of the file system
-				Volume Name
+				Volume name
 				Other relevant information (mentioned below).
 
 The following two alternatives have to be implemented:

@@ -9,7 +9,7 @@
 #define FILE_SYS_SIZE_OFFSET					8
 #define VOLUME_NAME_OFFSET						16
 #define BIT_VECTOR_OFFSET						24
-#define DIRECTORY_POINTER_MEMORY_ALLOCATION		8
+#define DIRECTORY_INFO_MEMORY_ALLOCATION		16
 
 struct memory{
 	char* space;
@@ -17,7 +17,6 @@ struct memory{
 	unsigned int block_size;
 	unsigned int file_sys_size;
 	unsigned long long numBytesBitVec;
-	char volumeName[8];
 
 	memory(unsigned int file_sys_size ,unsigned long long numBlocks, unsigned int block_size){
 
@@ -29,7 +28,7 @@ struct memory{
 		if(numBlocks%8!=0)
 			(this->numBytesBitVec)++;
 
-		if(BIT_VECTOR_OFFSET + this->numBytesBitVec + DIRECTORY_POINTER_MEMORY_ALLOCATION >= block_size){
+		if(BIT_VECTOR_OFFSET + this->numBytesBitVec + DIRECTORY_INFO_MEMORY_ALLOCATION >= block_size){
 			//8 is for directory pointer, atleast one directory will be there
 			perror("Block size is incapable of holding super block contents!");
 			exit(-1);
@@ -74,12 +73,17 @@ struct memory{
 
 	void updateBitVector_occupy(unsigned long long blockNum){
 
+		checkValidityBlock(blockNum);
+
+		this->space[BIT_VECTOR_OFFSET + blockNum/8] |= (1<<(7-blockNum%8));
 
 	}
 
 	void updateBitVector_free(unsigned long long blockNum){
 
+		checkValidityBlock(blockNum);
 
+		this->space[BIT_VECTOR_OFFSET + blockNum/8] &= ~(1<<(7-blockNum%8));
 	}
 
 	void createSuperBlock(){
@@ -93,20 +97,26 @@ struct memory{
 		// 		Size of the file system in MB 			|	8
 		// 		Volume name								|	16
 		// 		Bit vector 								|	24
-		// 		Pointer(s) to the directory(ies).		|	defined later
-
-		//specifying volume name
-		strcpy(this->volumeName, "root");
+		// 		Pointer(s) to the directory(ies).		|	BIT_VECTOR_OFFSET + numBytesBitVec
 
 		// The free blocks are maintained as a bit vector stored in the super block. 
 		// The number of bits will be equal to the number of blocks in the file system.
 		// If the i-th bit is 0, then block i is free; else, it is occupied.
+		updateBitVector_occupy(0);
 
+		char volName[8];
+		char dirName[16];
+		unsigned short blockNumber = -1;
+
+		strcpy(volName, "root");
+		strcpy(dirName, "home");
 
 		this->writeInfo(0, BLOCK_SIZE_OFFSET, (const void *)&(this->block_size), sizeof(this->block_size));
 		this->writeInfo(0, FILE_SYS_SIZE_OFFSET, (const void *)&(this->file_sys_size), sizeof(this->file_sys_size));
-		this->writeInfo(0, VOLUME_NAME_OFFSET, (const void *)&(this->volumeName), sizeof(this->volumeName));
-		this->writeInfo(0, BIT_VECTOR_OFFSET, (const void *)&(this->bitVector), sizeof(this->bitVector));
+		this->writeInfo(0, VOLUME_NAME_OFFSET, (const void *)&(volName), 8);
+		this->writeInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec, (const void *)&(dirName),DIRECTORY_INFO_MEMORY_ALLOCATION-2);
+		this->writeInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec + 14, (const void *)&(blockNumber),2);
+
 	}
 
 };

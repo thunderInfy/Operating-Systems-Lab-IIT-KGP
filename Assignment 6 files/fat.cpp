@@ -13,6 +13,30 @@
 
 int check_existence_dir(char*, unsigned int, unsigned int&);
 
+struct openFileTableEntry{
+
+	int FATIndex;
+	int filePointerOffset;
+
+	openFileTableEntry(){
+		this->FATIndex = -1;
+		this->filePointerOffset = 0;
+	}
+
+};
+
+struct directoryEntry{
+
+	char fileName[12];
+	int FATIndex;
+
+	directoryEntry(){
+		bzero((void *)(this->fileName), 12);
+		this->FATIndex = -1;
+	}
+
+};
+
 struct memory{
 	char* space;							//the entire memory that we would use		
 
@@ -85,6 +109,20 @@ struct memory{
 		return (this->space[BIT_VECTOR_OFFSET + blockNum/8] & (1<<(7-blockNum%8)));
 	}
 
+	void getFreeBlock(unsigned int numBlocks, unsigned int &freeBlock){
+		
+		for(freeBlock = 2; freeBlock<numBlocks ; freeBlock++){
+
+			if(getBit(freeBlock) == 0){
+				return;
+			}
+
+		}
+
+		perror("All blocks filled!");
+		exit(-1);
+	}
+
 	void updateBitVector_occupy(unsigned int blockNum){
 		this->space[BIT_VECTOR_OFFSET + blockNum/8] |= (1<<(7-blockNum%8));
 	}
@@ -125,8 +163,10 @@ struct memory{
 		bzero((void *)volName, 8);
 		bzero((void *)dirName, 12);
 
-		//block number where directory is stored
-		unsigned int blockNumber = numBlocks - 1;
+		//block number where directory is stored, second last block
+		unsigned int blockNumber = numBlocks - 2;
+
+		initializeDirectory(numBlocks - 2, block_size);
 
 		strcpy(volName, "root");
 		strcpy(dirName, "home");
@@ -167,6 +207,33 @@ struct memory{
 			this->writeInfo(1, block_size, Offset, (const void*)&value, sizeof(int));
 
 	}
+
+	void initializeOpenFileTable(unsigned int numBlocks, unsigned int block_size){
+
+		/*
+		Single entry of open file table:
+		FAT index (-1 means invalid) , File Open Count
+		*/
+		//occupying the last block for open file table
+		updateBitVector_occupy(numBlocks - 1);
+
+		openFileTableEntry initialStructure;
+
+		for(unsigned int Offset = 0; Offset < (block_size*1024); Offset+=sizeof(initialStructure))
+			this->writeInfo(numBlocks-1, block_size, Offset, (const void*)&initialStructure, sizeof(initialStructure));
+	}
+
+	void initializeDirectory(unsigned int directoryBlockNumber, unsigned int block_size){
+
+		//occupy the block
+		updateBitVector_occupy(directoryBlockNumber);
+
+		directoryEntry dirEnt;
+
+		for(unsigned int Offset = 0; Offset < (block_size*1024); Offset+=sizeof(dirEnt))
+			this->writeInfo(directoryBlockNumber, block_size, Offset, (const void*)&dirEnt, sizeof(dirEnt));
+
+	}
 };
 
 void getNumBlocks(unsigned int file_sys_size, unsigned int block_size, unsigned int &numBlocks){
@@ -175,11 +242,27 @@ void getNumBlocks(unsigned int file_sys_size, unsigned int block_size, unsigned 
 
 memory *disk;
 
+
+void getMetaInfoFromDisk(unsigned int &file_sys_size, unsigned int &block_size, unsigned int &numBlocks, unsigned int &numBytesBitVec, unsigned int &homeDirOffset){
+
+	//reading file_sys_size from disk
+	disk->readInfo(0, FILE_SYS_SIZE_OFFSET, &file_sys_size, sizeof(file_sys_size));
+
+	//reading block_size from disk
+	disk->getBlockSize(block_size);
+
+	getNumBlocks(file_sys_size, block_size, numBlocks);
+
+	//get offset for home directory
+	disk->getNumBytesBitVec(numBlocks, numBytesBitVec);
+	disk->getHomeDirOffset(numBytesBitVec, homeDirOffset);
+}
+
 //block 0 : 0 to block_size*1024-1
 //block 1 : block_size*1024 to 2*block_size*1024-1
 //block 2 : 2*block_size*1024 to 3*block_size*1024 - 1
 
-void generateFAT(unsigned int file_sys_size, unsigned int block_size){
+void generateFileSystem(unsigned int file_sys_size, unsigned int block_size){
 	// These are the inputs during the file system creation
 	// file_sys_size : Size of the file system in MB	(Typical Value : 64MB)
 	// block_size	 : Block Size in KB 				(Typical Value : 1 KB)
@@ -196,11 +279,98 @@ void generateFAT(unsigned int file_sys_size, unsigned int block_size){
 	//intialize FAT
 	disk->initializeFAT(block_size);
 
+	//initialize open file table
+	disk->initializeOpenFileTable(numBlocks, block_size);
 }
 
-// opens a file for reading/writing (create if not existing)
-void my_open(){
+void updateOpenFileTable(directoryEntry dirEnt, unsigned int numBlocks, unsigned int block_size, unsigned int &Offset){
 
+	openFileTableEntry openFileEnt;
+	openFileEnt.FATIndex = dirEnt.FATIndex;
+
+	openFileTableEntry temp;
+	temp.FATIndex = 0;
+
+	for(Offset = 0; temp.FATIndex != -1; Offset+=sizeof(temp))
+		disk->readInfo(numBlocks-1, Offset, &temp, sizeof(temp));
+
+	Offset-=sizeof(temp);
+
+	disk->writeInfo(numBlocks-1, block_size, Offset, (const void*)&openFileEnt, sizeof(openFileEnt));
+
+}
+
+
+// opens a file for reading/writing (create if not existing)
+int my_open(char* filename){
+
+	if(strlen(filename) > 11){
+		perror("Maximum length of file name can be 11");
+		return -1;
+	}
+
+	unsigned int numBytesBitVec;
+	unsigned int numBlocks;
+	unsigned int file_sys_size;
+	unsigned int block_size;
+	unsigned int homeDirOffset;
+	unsigned int workingDirBlockNum;
+
+	getMetaInfoFromDisk(file_sys_size, block_size, numBlocks, numBytesBitVec, homeDirOffset);
+
+	//getting working directory block number
+	disk->readInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec + 12, &workingDirBlockNum, sizeof(workingDirBlockNum));
+
+	if(workingDirBlockNum <=1 ){
+		perror("Invalid working directory");
+		return -1;
+	}
+
+	directoryEntry dirEnt;
+	unsigned int Offset = 0;
+
+	do{
+
+		disk->readInfo(workingDirBlockNum, Offset, &dirEnt, sizeof(dirEnt));	
+		
+		if(strcmp(dirEnt.fileName, filename) == 0){
+			//file found
+
+			unsigned int openFileTableOffset;
+
+			updateOpenFileTable(dirEnt, numBlocks, block_size, openFileTableOffset);
+
+			return openFileTableOffset;
+
+		}
+
+		Offset+=sizeof(dirEnt);	
+
+	}while(dirEnt.FATIndex!=-1);
+
+	Offset-=sizeof(dirEnt);
+
+	//file not found, create
+	unsigned int freeBlock;
+
+	//get free block
+	disk->getFreeBlock(numBlocks, freeBlock);
+
+	//update dirEnt details
+	strcpy(dirEnt.fileName, filename);
+
+	dirEnt.FATIndex = freeBlock;
+	disk->writeInfo(workingDirBlockNum, block_size, Offset, &dirEnt, sizeof(dirEnt));
+
+	//occupy and clear the block
+	disk->updateBitVector_occupy(freeBlock);
+	disk->clearBlockContents(freeBlock, block_size);
+
+	unsigned int openFileTableOffset;
+
+	updateOpenFileTable(dirEnt, numBlocks, block_size, openFileTableOffset);
+
+	return openFileTableOffset;;
 }
 
 // closes an already opened file
@@ -219,11 +389,11 @@ void my_write(){
 }
 
 // creates a new directory
-void my_mkdir(char* dir){
+int my_mkdir(char* dir){
 
 	if(strlen(dir)>11){
 		perror("Maximum length of directory name can be 11");
-		exit(-1);
+		return -1;
 	}
 
 	unsigned int numBytesBitVec;
@@ -232,35 +402,27 @@ void my_mkdir(char* dir){
 	unsigned int block_size;
 	unsigned int homeDirOffset;
 
-	//reading file_sys_size from disk
-	disk->readInfo(0, FILE_SYS_SIZE_OFFSET, &file_sys_size, sizeof(file_sys_size));
-
-	//reading block_size from disk
-	disk->getBlockSize(block_size);
-
-	getNumBlocks(file_sys_size, block_size, numBlocks);
-
-	//get offset for home directory
-	disk->getNumBytesBitVec(numBlocks, numBytesBitVec);
-	disk->getHomeDirOffset(numBytesBitVec, homeDirOffset);
+	getMetaInfoFromDisk(file_sys_size, block_size, numBlocks, numBytesBitVec, homeDirOffset);
 
 	unsigned int offset;
 
 	if(check_existence_dir(dir, homeDirOffset, offset) >= 0 ){
 
 		perror("Cannot create directory, it already exists!");
-		exit(-1);
+		return -1;
 
 	}
 
-	unsigned int blockNum = numBlocks - 2;
+	unsigned int blockNum = numBlocks - 3;
 	//find a free block
 	while((disk->getBit(blockNum)) == 1)blockNum--;
 
 	if(blockNum < 0){
 		perror("All blocks filled!");
-		exit(-1);
+		return -1;
 	}
+
+	disk->initializeDirectory(blockNum, block_size);
 
 	//free block found
 	//storing directory name at the respective offset
@@ -268,6 +430,8 @@ void my_mkdir(char* dir){
 
 	//storing blockNumber of the home directory at the respective offset
 	disk->writeInfo(0, block_size, offset + 12, (const void *)&(blockNum),sizeof(unsigned int));	
+
+	return 0;
 
 }
 
@@ -296,7 +460,7 @@ int check_existence_dir(char* dir, unsigned int homeDirOffset, unsigned int &off
 }
 
 // changes the working directory
-void my_chdir(char* dir){
+int my_chdir(char* dir){
 
 	unsigned int numBytesBitVec;
 	unsigned int numBlocks;
@@ -304,29 +468,26 @@ void my_chdir(char* dir){
 	unsigned int block_size;
 	unsigned int homeDirOffset;
 
-	//reading file_sys_size from disk
-	disk->readInfo(0, FILE_SYS_SIZE_OFFSET, &file_sys_size, sizeof(file_sys_size));
-
-	//reading block_size from disk
-	disk->getBlockSize(block_size);
-
-	getNumBlocks(file_sys_size, block_size, numBlocks);
-
-	//get offset for home directory
-	disk->getNumBytesBitVec(numBlocks, numBytesBitVec);
-	disk->getHomeDirOffset(numBytesBitVec, homeDirOffset);
+	getMetaInfoFromDisk(file_sys_size, block_size, numBlocks, numBytesBitVec, homeDirOffset);
 
 	unsigned int offset;
 
 	if(check_existence_dir(dir, homeDirOffset, offset)<0){
 		perror("Directory not found!");
-		exit(-1);
+		return -1;
 	}	
 
 	//writing working directory details in the superblock
 	disk->writeInfo(0, block_size, BIT_VECTOR_OFFSET + numBytesBitVec, (const void *)(dir), 12);
-	disk->writeInfo(0, block_size, BIT_VECTOR_OFFSET + numBytesBitVec, (const void *)&(offset), sizeof(offset));
 
+	unsigned int workingDirBlockNum;
+
+	//reading block of the working directory
+	disk->readInfo(0, offset+12, &workingDirBlockNum, sizeof(workingDirBlockNum));
+
+	disk->writeInfo(0, block_size, BIT_VECTOR_OFFSET + numBytesBitVec + 12, (const void *)&(workingDirBlockNum), sizeof(workingDirBlockNum));
+
+	return 0;
 }
 
 // removes a directory along with all its contents
@@ -344,7 +505,13 @@ void my_cat(){
 	
 }
 
-int main(){
+int main(){	
+
+	// generateFileSystem(32, 16);
+	// my_chdir((char*)"home");
+	// printf("%d\n",my_open((char*)"hey"));
+	// printf("%d\n",my_open((char*)"hey"));
+	// printf("%d\n",my_open((char*)"hey2"));
 
 	return 0;
 }

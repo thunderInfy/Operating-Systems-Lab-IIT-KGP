@@ -106,7 +106,9 @@ struct memory{
 
 		char volName[8];
 		char dirName[16];
-		unsigned short blockNumber = -1;
+
+		//block number where directory is stored
+		unsigned long long blockNumber = blockNumber - 1;
 
 		strcpy(volName, "root");
 		strcpy(dirName, "home");
@@ -114,8 +116,14 @@ struct memory{
 		this->writeInfo(0, BLOCK_SIZE_OFFSET, (const void *)&(this->block_size), sizeof(this->block_size));
 		this->writeInfo(0, FILE_SYS_SIZE_OFFSET, (const void *)&(this->file_sys_size), sizeof(this->file_sys_size));
 		this->writeInfo(0, VOLUME_NAME_OFFSET, (const void *)&(volName), 8);
-		this->writeInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec, (const void *)&(dirName),DIRECTORY_INFO_MEMORY_ALLOCATION-2);
-		this->writeInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec + 14, (const void *)&(blockNumber),2);
+		this->writeInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec, (const void *)&(dirName),DIRECTORY_INFO_MEMORY_ALLOCATION/2);
+		this->writeInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec + DIRECTORY_INFO_MEMORY_ALLOCATION/2, (const void *)&(blockNumber),2);
+
+	}
+
+	void createFAT(){
+
+
 
 	}
 
@@ -140,6 +148,8 @@ void generateFAT(unsigned int file_sys_size, unsigned int block_size){
 	//create super block
 	disk.createSuperBlock();
 
+	//create FAT
+	disk.createFAT();
 
 }
 
@@ -147,16 +157,6 @@ int main(){
 	return 0;
 }
  
-// Features of the file system:
-
-
-
-// The following two alternatives have to be implemented:
-
-// Alternative 1: (Linked List Implementation using FAT)
-	
-// 	Super Block also contains:
-
 
 // 	2)	The data blocks of a file are maintained using a system-wide File Allocation Table (FAT)
 // 		It will be stored in Block-1.

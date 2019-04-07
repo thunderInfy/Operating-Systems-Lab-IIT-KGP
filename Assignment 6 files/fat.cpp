@@ -35,6 +35,13 @@ struct memory{
 			exit(-1);
 		}
 
+		if((block_size/sizeof(long long))<numBlocks){
+
+			perror("Block size too small, FAT cannot be initialized properly!");
+			exit(-1);
+
+		}
+
 		// Simulate the disk as a set of contiguous blocks in memory
 		space = (char*)malloc(numBlocks * block_size * 1024);
 	}
@@ -138,16 +145,18 @@ struct memory{
 		// The data blocks of a file are maintained using a system-wide File Allocation Table (FAT)
 		// It will be stored in Block-1.
 
-		int value = -1;
+		long long value = -1;
 		int Offset = 0;
 
 		//put value -1 for all FAT values
-		for(;Offset<(this->block_size); Offset+=sizeof(int))
-			this->writeInfo(1, OffSet, (const void*)&value, sizeof(int));
+		for(;Offset<(this->block_size); Offset+=sizeof(long long))
+			this->writeInfo(1, Offset, (const void*)&value, sizeof(long long));
 
 	}
 
 };
+
+memory *disk;
 
 //block 0 : 0 to block_size-1
 //block 1 : block_size to 2*block_size-1
@@ -163,22 +172,20 @@ void generateFAT(unsigned int file_sys_size, unsigned int block_size){
 	numBlocks = (file_sys_size*1024)/block_size;		//get number of blocks
 	
 	// Create memory dynamically
-	memory disk(file_sys_size, numBlocks, block_size);
+	disk = new memory(file_sys_size, numBlocks, block_size);
 
 	//create super block
-	disk.createSuperBlock();
+	disk->createSuperBlock();
 
 	//intialize FAT
-	disk.initializeFAT();
+	disk->initializeFAT();
+
+}
+
+void my_open(){
 
 }
 
 int main(){
 	return 0;
 }
- 
-// 	3)	The directory is stored in a fixed block (with pointer in super block). 
-// 		Assume single-level directory. 
-// 		Each directory entry contains a number that is an index to FAT, and indicates the first block of the respective file. 
-// 		If the i-th entry of FAT contains j, this means block-j will logically follow block-I in the respective file.
-// 	4) The data blocks will be stored from Block-2 onwards.

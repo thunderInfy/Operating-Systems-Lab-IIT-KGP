@@ -12,19 +12,20 @@
 #define DIRECTORY_INFO_MEMORY_ALLOCATION		16
 
 struct memory{
-	char* space;
-	unsigned long long numBlocks;
-	unsigned int block_size;
-	unsigned int file_sys_size;
-	unsigned long long numBytesBitVec;
+	char* space;							//the entire memory that we would use
+	unsigned long long numBlocks;			//total number of blocks as we would get from the input
+	unsigned int block_size;				//block size as we would get
+	unsigned int file_sys_size;				//file system size as we would get
+	unsigned long long numBytesBitVec;		//number of bytes reserved for bit vector
 
+	//constructor
 	memory(unsigned int file_sys_size ,unsigned long long numBlocks, unsigned int block_size){
 
 		this->file_sys_size = file_sys_size;
 		this->numBlocks = numBlocks;
 		this->block_size = block_size;
-		this->numBytesBitVec = numBlocks/8;
 
+		this->numBytesBitVec = numBlocks/8;
 		if(numBlocks%8!=0)
 			(this->numBytesBitVec)++;
 
@@ -86,6 +87,7 @@ struct memory{
 		this->space[BIT_VECTOR_OFFSET + blockNum/8] &= ~(1<<(7-blockNum%8));
 	}
 
+	//function to create the super block
 	void createSuperBlock(){
 
 		//clear block 0 where super block will be stored
@@ -108,19 +110,29 @@ struct memory{
 		char dirName[16];
 
 		//block number where directory is stored
-		unsigned long long blockNumber = blockNumber - 1;
+		unsigned long long blockNumber = this->numBlocks - 1;
 
 		strcpy(volName, "root");
 		strcpy(dirName, "home");
 
+		//storing block size at block size offset
 		this->writeInfo(0, BLOCK_SIZE_OFFSET, (const void *)&(this->block_size), sizeof(this->block_size));
+		
+		//storing file system size at the respective offset
 		this->writeInfo(0, FILE_SYS_SIZE_OFFSET, (const void *)&(this->file_sys_size), sizeof(this->file_sys_size));
+
+		//storing volume name at the respective offset
 		this->writeInfo(0, VOLUME_NAME_OFFSET, (const void *)&(volName), 8);
+		
+		//storing directory name at the respective offset
 		this->writeInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec, (const void *)&(dirName),DIRECTORY_INFO_MEMORY_ALLOCATION/2);
-		this->writeInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec + DIRECTORY_INFO_MEMORY_ALLOCATION/2, (const void *)&(blockNumber),2);
+
+		//storing blockNumber of the home directory at the respective offset
+		this->writeInfo(0, BIT_VECTOR_OFFSET + numBytesBitVec + DIRECTORY_INFO_MEMORY_ALLOCATION/2, (const void *)&(blockNumber),DIRECTORY_INFO_MEMORY_ALLOCATION/2);
 
 	}
 
+	//function to create FAT in block 1
 	void createFAT(){
 
 

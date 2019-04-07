@@ -13,9 +13,6 @@
 
 using namespace std;
 
-ofstream fout3, fout4, fout1;
-int ToPrint = 1;
-
 //initializing timestamp is 0
 int timestamp = 0;
 int mq2_id, mq3_id, sm1_id, sm2_id, sm3_id, k, m, f, s;
@@ -139,20 +136,11 @@ int checkTLB(msgPageFrameBuffer msgPFB){
 
 	auto itr = tlb.find(v);
 
-	fout4<<tlb.size()<<'\n';
-
 	if(itr==tlb.end()){
-
-		fout4<<timestamp<<" Not found in TLB : Info PID: "<<v.pid<<" Page number : "<<v.pageNum<<'\n';
-		fflush(NULL);
-
 		return -1;
 	}
 
 	//found in tlb, sending frame number to process
-
-	fout4<<timestamp<<" Found in TLB : Info PID: "<<v.pid<<" Page number : "<<v.pageNum<<'\n';
-	fflush(NULL);
 
 	tlb[v].timestamp = timestamp;
 	pageTimeStamps[processToIndex[v.pid]][v.pageNum] = timestamp;
@@ -250,17 +238,6 @@ void HandlePageFault(int pageNum, pid_t pid){
 
 		if(maxDifference != -1){
 			//Victim Page found
-
-			if(ToPrint == 1){
-				fout1<<'('<<pid<<','<<pageNum<<")\n";
-				fflush(NULL);
-			}
-			ToPrint = 0;
-
-
-			fout3<<timestamp<<" Victim page: "<<jVal<<" pageNum: "<<pageNum<<'\n';
-			fflush(NULL);
-
 			pageTables[index*m + pageNum].frameNo = pageTables[index*m + jVal].frameNo;
 			pageTables[index*m + jVal].validity = 0;
 			pageTables[index*m + pageNum].validity = 1;
@@ -269,13 +246,10 @@ void HandlePageFault(int pageNum, pid_t pid){
 
 			updateTLB(pageNum, pid, pageTables[index*m+pageNum].frameNo);
 		}
-		else{
+		/*else{
 			//Local Page Replacement failed
 			//Doing global page replacement
-			fout3<<"Local Page Replacement Algorithm failed!";	
-			fflush(NULL);
-		}
-		/*
+
 			maxDifference = -1;
 			jVal = -1;
 			int iVal = -1;
@@ -368,18 +342,15 @@ int main(int argc, char* argv[]){
 
 	int counter = 0;
 
-	ofstream fout2;
+	ofstream fout1, fout2;
 
 	fout1.open("file2.txt");
 	fout2.open("file3.txt");
-	fout3.open("Invalid_Info.txt");
-	fout4.open("TLB_Accesses.txt");
 
 	fout1 << "\n Page fault sequence (pi,xi) : \n";
 	fout2 << "\n Global ordering (ti,pi,xi) : \n";
 
 	while(counter < k){
-		ToPrint = 1;
 		//MMU wakes up after receiving the page number via message queue (MQ3) from Process.
 		msgrcv(mq3_id, &msgPFB, sizeof(msgPFB), 1, 0);
 
@@ -412,9 +383,6 @@ int main(int argc, char* argv[]){
 
 				updateFreeFrameList(msgPFB.pid);
 
-				fout3<<"Invalid page number for process "<<msgPFB.pid<<" page number : "<<msgPFB.data<<" \n";
-				fflush(NULL);
-
 				schMsgC.mesg_type = 1;
 				strcpy(schMsgC.mesg,"TERMINATED");
 
@@ -437,12 +405,8 @@ int main(int argc, char* argv[]){
 						//Sends -1 to the process as frame number
 						replyToProcess(msgPFB, -1);
 
-						if(ToPrint == 1){
-							fout1<<'('<<msgPFB.pid<<','<<msgPFB.data<<")\n";
-							fflush(NULL);
-						}
-						ToPrint = 0;
-
+						fout1<<'('<<msgPFB.pid<<','<<msgPFB.data<<")\n";
+						fflush(NULL);
 						cout<<'('<<msgPFB.pid<<','<<msgPFB.data<<")\n";
 						fflush(NULL);
 
@@ -488,8 +452,6 @@ int main(int argc, char* argv[]){
 
 	fout1.close();
 	fout2.close();
-	fout3.close();
-	fout4.close();
 	
 	pause();
 

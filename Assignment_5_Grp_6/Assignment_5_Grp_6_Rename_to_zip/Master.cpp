@@ -19,17 +19,6 @@ using namespace std;
 
 int isSignalReceived = 0;
 
-//get exponential distribution from a uniform random variable R between 0 & 1
-double getExpoFromUni(double lambda, double R){
-	double out =  (-1.0/lambda)*log(R);
-	return out;
-}
-
-//get uniform random variable between 0 and 1
-double getUni(){
-	return ((double) rand() / (RAND_MAX));
-}
-
 //Each entry in page table contains < frame_number, valid/invalid bit >
 struct pageTableNode {
 	int frameNo;
@@ -268,7 +257,7 @@ int main(int argc, char* argv[]){
 		string pageRefString = "";
 
 		for(int j=0; j<li; j++){
-			pageRefString += to_string(int(getExpoFromUni(0.5, getUni()) * mi));
+			pageRefString += to_string(rand()%mi);
 
 			if(j!=li-1)
 				pageRefString += ",";

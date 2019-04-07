@@ -1,0 +1,3 @@
+Total number of page faults for process with process id : 28058 is 377
+Total number of page faults for process with process id : 28061 is 2
+

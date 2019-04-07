@@ -107,7 +107,7 @@ struct memory{
 		updateBitVector_occupy(0);
 
 		char volName[8];
-		char dirName[16];
+		char dirName[8];
 
 		//block number where directory is stored
 		unsigned long long blockNumber = this->numBlocks - 1;
@@ -132,10 +132,18 @@ struct memory{
 
 	}
 
-	//function to create FAT in block 1
-	void createFAT(){
+	//function to initialize FAT in block 1
+	void initializeFAT(){
 
+		// The data blocks of a file are maintained using a system-wide File Allocation Table (FAT)
+		// It will be stored in Block-1.
 
+		int value = -1;
+		int Offset = 0;
+
+		//put value -1 for all FAT values
+		for(;Offset<(this->block_size); Offset+=sizeof(int))
+			this->writeInfo(1, OffSet, (const void*)&value, sizeof(int));
 
 	}
 
@@ -160,8 +168,8 @@ void generateFAT(unsigned int file_sys_size, unsigned int block_size){
 	//create super block
 	disk.createSuperBlock();
 
-	//create FAT
-	disk.createFAT();
+	//intialize FAT
+	disk.initializeFAT();
 
 }
 
@@ -169,9 +177,6 @@ int main(){
 	return 0;
 }
  
-
-// 	2)	The data blocks of a file are maintained using a system-wide File Allocation Table (FAT)
-// 		It will be stored in Block-1.
 // 	3)	The directory is stored in a fixed block (with pointer in super block). 
 // 		Assume single-level directory. 
 // 		Each directory entry contains a number that is an index to FAT, and indicates the first block of the respective file. 

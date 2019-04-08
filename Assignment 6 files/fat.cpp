@@ -425,6 +425,31 @@ int my_close( int fd){
 	return 0;
 }
 
+int goToBlockLevel(int currentBlock, int blockLevel, int &blockLevelNumber){
+
+	int curr = currentBlock;
+	int levels = blockLevel;
+	int value;
+
+	while(levels--){
+
+		disk->getFATVal(curr, value);
+
+		if(value == -1){
+			return -1;
+		}
+
+		curr = value;
+
+	}
+
+	blockLevelNumber = curr;
+
+	return 0;
+
+}
+
+
 // reads data from an already open file
 int my_read(int fd, void *buffer, size_t count){
 
@@ -459,7 +484,58 @@ int my_read(int fd, void *buffer, size_t count){
 
 	//access for read is allowed
 	int bytesRead = 0;
+	int blockLevel, blockOffset, blockLevelNumber;
 
+	blockLevel = (temp.readFilePointerOffset)/block_size;
+	blockOffset = (temp.readFilePointerOffset)%block_size;
+
+	if(goToBlockLevel(temp.FATIndex, blockLevel, blockLevelNumber) < 0){
+		perror("Read File Pointer already at end!");
+		return 0;
+	}
+
+	int remainingBytesInBlockLevel = block_size - blockOffset;
+
+	if((int)count <= remainingBytesInBlockLevel){
+		disk->readInfo(blockLevelNumber, blockOffset, (void *)buf, count);
+		temp.readFilePointerOffset+=count;
+		return count;
+	}
+	else
+		disk->readInfo(blockLevelNumber, blockOffset, (void *)buf, remainingBytesInBlockLevel);
+
+	bytesRead = remainingBytesInBlockLevel;
+
+	int remainingCount = count - bytesRead;
+	int block_count = remainingCount/block_size;
+
+	if(remainingCount%block_size != 0)	block_count++;
+
+	//proceeding towards reading more blocks for the current file
+	int prev = blockLevelNumber, value, q;
+
+	for(q=0;q<block_count;q++){
+
+		disk->getFATVal(prev, value);
+
+		if(value == -1){
+			break;
+		}
+
+		prev = value;
+
+		//Read from this block
+		if(q==block_count-1){
+			disk->readInfo(prev, 0, (void *)(buf+bytesRead), count - bytesRead);
+			bytesRead = count;
+		}
+		else{
+			disk->readInfo(prev, 0, (void *)(buf+bytesRead), block_size);
+			bytesRead += block_size;
+		}
+	}
+
+	temp.readFilePointerOffset+=bytesRead;
 
 	return bytesRead;
 }
@@ -722,7 +798,14 @@ int main(){
 	my_close(0);
 	printf("%d\n",my_open((char*)"hey2", READ_ONLY));
 	printf("%d\n",my_open((char*)"hey2", READ_WRITE));
-	my_write(32, (const void *)"g",2);
+	
+
+	my_write(32, (const void *)"dsvdwvwrgvrwgv",20);
+	
+	char* buf;
+	my_read(32, (void *)buf, 20);
+
+	printf("%s\n",buf);
 
 	return 0;
 }

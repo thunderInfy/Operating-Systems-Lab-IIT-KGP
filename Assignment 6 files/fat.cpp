@@ -460,11 +460,13 @@ int my_read(int fd, void *buffer, size_t count){
 	//access for read is allowed
 	int bytesRead = 0;
 
-	
 
+	return bytesRead;
 }
 
-void allocateBlocks(int &prev, int &value, int numBlocks, int freeBlock, int block_size){ 
+void allocateBlocks(int &prev, int &value, int numBlocks, int block_size){ 
+
+	int freeBlock;
 
 	disk->getFATVal(prev, value);
 
@@ -540,7 +542,7 @@ int my_write(int fd, const void *buffer, size_t count){
 		//check if the q-th block is assigned or not 
 		//for this, we need the previous block number
 		//use the previous block number to look into FAT
-		allocateBlocks(prev,value,numBlocks,freeBlock,block_size);
+		allocateBlocks(prev,value,numBlocks,block_size);
 	}
 
 	int remainingBytesInBlockLevel = block_size - blockOffset;
@@ -566,7 +568,7 @@ int my_write(int fd, const void *buffer, size_t count){
 
 	for(q=0;q<block_count;q++){
 
-		allocateBlocks(prev,value,numBlocks,freeBlock,block_size);
+		allocateBlocks(prev,value,numBlocks,block_size);
 
 		//write on this block
 		if(q==block_count-1){
@@ -702,25 +704,25 @@ void my_cat(){
 
 int main(){	
 
-	// generateFileSystem(32, 16);
-	// int value;
-	// disk->getFATVal(5,value);
-	// printf("%d\n", value);
-	// value = 4;
-	// disk->setFATVal(5,value);
-	// disk->getFATVal(5,value);
-	// printf("%d\n", value);
-	// disk->getFATVal(6,value);
-	// printf("%d\n", value);
-	// my_chdir((char*)"home");
-	// printf("%d\n",my_open((char*)"hey", READ_ONLY));
-	// my_close(0);
-	// printf("%d\n",my_open((char*)"hey", READ_ONLY));
-	// printf("%d\n",my_open((char*)"hey2", READ_ONLY));
-	// my_close(0);
-	// printf("%d\n",my_open((char*)"hey2", READ_ONLY));
-	// printf("%d\n",my_open((char*)"hey2", READ_WRITE));
-	// my_write(32, (const void *)"g",2);
+	generateFileSystem(32, 16);
+	int value;
+	disk->getFATVal(5,value);
+	printf("%d\n", value);
+	value = 4;
+	disk->setFATVal(5,value);
+	disk->getFATVal(5,value);
+	printf("%d\n", value);
+	disk->getFATVal(6,value);
+	printf("%d\n", value);
+	my_chdir((char*)"home");
+	printf("%d\n",my_open((char*)"hey", READ_ONLY));
+	my_close(0);
+	printf("%d\n",my_open((char*)"hey", READ_ONLY));
+	printf("%d\n",my_open((char*)"hey2", READ_ONLY));
+	my_close(0);
+	printf("%d\n",my_open((char*)"hey2", READ_ONLY));
+	printf("%d\n",my_open((char*)"hey2", READ_WRITE));
+	my_write(32, (const void *)"g",2);
 
 	return 0;
 }

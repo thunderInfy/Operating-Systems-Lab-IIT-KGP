@@ -1,263 +1,258 @@
-// Objective : Implement a memory-resident file system in a memory block
+#include "fat.h"
 
-#include <cstdlib>		//for malloc, exit
-#include <cstdio>		//for perror
-#include <strings.h>	//for bzero
-#include <string.h>		//for memcpy
-
-#define BLOCK_SIZE_OFFSET 						0
-#define FILE_SYS_SIZE_OFFSET					8
-#define VOLUME_NAME_OFFSET						16
-#define BIT_VECTOR_OFFSET						24
-#define DIRECTORY_INFO_MEMORY_ALLOCATION		16
-
-#define READ_ONLY		0
-#define WRITE_ONLY		1
-#define READ_WRITE		2
-#define INVALID_TYPE	3
 
 int check_existence_dir(char*,  int,  int&);
-
-struct openFileTableEntry{
-
-	int FATIndex;
-	int readFilePointerOffset;
-	int writeFilePointerOffset;
-	int type;
-
-	openFileTableEntry(){
-		this->FATIndex = -1;
-		this->readFilePointerOffset = 0;
-		this->writeFilePointerOffset = 0;
-		this->type = INVALID_TYPE;
-	}
-
-};
-
-struct directoryEntry{
-
-	char fileName[12];
-	int FATIndex;
-
-	directoryEntry(){
-		bzero((void *)(this->fileName), 12);
-		this->FATIndex = -1;
-	}
-
-};
+void getNumBlocks( int,  int,  int&);
+void getMetaInfoFromDisk( int&,  int&,  int&,  int&, int&);
+void generateFileSystem(int, int);
+void updateOpenFileTable(directoryEntry, int, int, int&, int);
+int my_open(char*, int);
+int my_close(int);
+int goToBlockLevel(int, int, int&);
+int my_read(int, char*, size_t);
+void allocateBlocks(int&, int&, int, int);
+int my_write(int, char*, size_t);
+int my_mkdir(char*);
+int my_chdir(char*);
+void my_rmdir();
+void my_copy();
+void my_cat();
 
 struct memory{
 	char* space;							//the entire memory that we would use		
 
 	//constructor
-	memory( int file_sys_size , int numBlocks,  int block_size){
-
-		 int numBytesBitVec;					//number of bytes reserved for bit vector
-		getNumBytesBitVec(numBlocks, numBytesBitVec);
-
-		 int homeDirOffset;
-		getHomeDirOffset(numBytesBitVec, homeDirOffset);
-
-		if(homeDirOffset + DIRECTORY_INFO_MEMORY_ALLOCATION >= block_size*1024){
-			perror("Block size is incapable of holding super block contents (even one directory)!");
-			exit(-1);
-		}
-
-		if(((int)((block_size*1024)/sizeof(int)))<numBlocks){
-			printf("Block Size : %d\nNo. of Blocks : %d\n",block_size,numBlocks);
-			perror("Block size too small, FAT cannot be initialized properly!");
-			exit(-1);
-
-		}
-
-		// Simulate the disk as a set of contiguous blocks in memory
-		space = (char*)malloc(numBlocks * block_size * 1024);
-	}
+	memory( int file_sys_size , int numBlocks,  int block_size);
 
 	//destructor
 	~memory(){
 		free(space);
 	}
 
-	void getNumBytesBitVec( int numBlocks,  int &numBytesBitVec){
-		numBytesBitVec = numBlocks/8;
-		
-		if(numBlocks%8!=0)
-			(numBytesBitVec)++;
-	}
+	void getNumBytesBitVec( int numBlocks,  int &numBytesBitVec);
+	void createSuperBlock( int file_sys_size,  int numBlocks,  int block_size);
+	void initializeFAT( int block_size);
+	void getHomeDirOffset( int numBytesBitVec,  int &homeDirOffset);
+	void clearBlockContents( int blockNum,  int block_size);
+	void writeInfo(int blockNum, int block_size,  int offset, const void *src, size_t n);
+	void getFATVal( int index,  int &value);
+	void setFATVal( int index,  int value);
+	void readInfo( int blockNum,  int offset, void *dest, size_t n);
+	void getBlockSize( int &block_size);
+	int  getBit( int blockNum);
+	void getFreeBlock( int numBlocks,  int &freeBlock);
+	void updateBitVector_occupy( int blockNum);
+	void updateBitVector_free( int blockNum);
+	void initializeOpenFileTable( int numBlocks,  int block_size);
+	void initializeDirectory( int directoryBlockNumber,  int block_size);
 
-	void getHomeDirOffset( int numBytesBitVec,  int &homeDirOffset){
-		homeDirOffset = BIT_VECTOR_OFFSET + numBytesBitVec + 16;
-	}
+};
 
-	void clearBlockContents( int blockNum,  int block_size){
-		bzero((void*)(space + blockNum*block_size*1024), block_size*1024);
-	}
+memory::memory( int file_sys_size , int numBlocks,  int block_size){
 
-	void writeInfo(int blockNum, int block_size,  int offset, const void *src, size_t n){
-		memcpy((void*)(space + blockNum*block_size*1024 + offset),src,n);
-	}
+	int numBytesBitVec;					//number of bytes reserved for bit vector
+	getNumBytesBitVec(numBlocks, numBytesBitVec);
 
-	void getFATVal( int index,  int &value){
-		readInfo(1, index*sizeof( int), &value, sizeof( int));
-	}
+	int homeDirOffset;
+	getHomeDirOffset(numBytesBitVec, homeDirOffset);
 
-	void setFATVal( int index,  int value){
-		 int block_size;
-		getBlockSize(block_size);
-
-		writeInfo(1, block_size, index*sizeof( int), (const void *)&value, sizeof( int));
-	}
-
-	void readInfo( int blockNum,  int offset, void *dest, size_t n){
-		 int block_size;
-		getBlockSize(block_size);
-
-		if(offset >= (block_size*1024)){
-			perror("Out of Block error!");
-			exit(-1);
-		}
-
-		memcpy(dest,(const void *)(space + blockNum*block_size*1024 + offset),n);
-	}
-
-	void getBlockSize( int &block_size){
-		memcpy(&block_size,(const void *)(space + BLOCK_SIZE_OFFSET),sizeof(block_size));
-	}
-
-	int getBit( int blockNum){
-		return (this->space[BIT_VECTOR_OFFSET + blockNum/8] & (1<<(7-blockNum%8)));
-	}
-
-	void getFreeBlock( int numBlocks,  int &freeBlock){
-		
-		for(freeBlock = 2; freeBlock<numBlocks ; freeBlock++){
-
-			if(getBit(freeBlock) == 0){
-				return;
-			}
-
-		}
-
-		perror("All blocks filled!");
+	if(homeDirOffset + DIRECTORY_INFO_MEMORY_ALLOCATION >= block_size*1024){
+		perror("Block size is incapable of holding super block contents (even one directory)!");
 		exit(-1);
 	}
 
-	void updateBitVector_occupy( int blockNum){
-		this->space[BIT_VECTOR_OFFSET + blockNum/8] |= (1<<(7-blockNum%8));
-	}
-
-	void updateBitVector_free( int blockNum){
-		this->space[BIT_VECTOR_OFFSET + blockNum/8] &= ~(1<<(7-blockNum%8));
-	}
-
-	//function to create the super block
-	void createSuperBlock( int file_sys_size,  int numBlocks,  int block_size){
-
-		 int numBytesBitVec;
-		getNumBytesBitVec(numBlocks, numBytesBitVec);
-
-		 int homeDirOffset;
-		getHomeDirOffset(numBytesBitVec, homeDirOffset);
-
-		//clear block 0 where super block will be stored
-		this->clearBlockContents(0, block_size);
-
-		// Block 0 is the super block which contains:
-		//		Name of variable 						|	Offset
-		// 		Block size 								|	0
-		// 		Size of the file system in MB 			|	8
-		// 		Volume name								|	16
-		// 		Bit vector 								|	24
-		//		Working Directory 						|	BIT_VECTOR_OFFSET + numBytesBitVec
-		// 		Pointer(s) to the directory(ies).		|	homeDirOffset
-
-		// The free blocks are maintained as a bit vector stored in the super block. 
-		// The number of bits will be equal to the number of blocks in the file system.
-		// If the i-th bit is 0, then block i is free; else, it is occupied.
-		updateBitVector_occupy(0);
-
-		char volName[8];
-		char dirName[12];
-
-		bzero((void *)volName, 8);
-		bzero((void *)dirName, 12);
-
-		//block number where directory is stored, second last block
-		 int blockNumber = numBlocks - 2;
-
-		initializeDirectory(numBlocks - 2, block_size);
-
-		strcpy(volName, "root");
-		strcpy(dirName, "home");
-
-		//storing block size at block size offset
-		this->writeInfo(0, block_size, BLOCK_SIZE_OFFSET, (const void *)&(block_size), sizeof(block_size));
-		
-		//storing file system size at the respective offset
-		this->writeInfo(0, block_size, FILE_SYS_SIZE_OFFSET, (const void *)&(file_sys_size), sizeof(file_sys_size));
-
-		//storing volume name at the respective offset
-		this->writeInfo(0, block_size, VOLUME_NAME_OFFSET, (const void *)(volName), strlen(volName)+1);
-		
-		//working directory initially is nothing, not even home, so storing nothing
-
-		//storing directory name at the respective offset
-		this->writeInfo(0, block_size, homeDirOffset, (const void *)(dirName),strlen(dirName)+1);
-
-		//storing blockNumber of the home directory at the respective offset
-		this->writeInfo(0, block_size, homeDirOffset + 12, (const void *)&(blockNumber),sizeof( int));
+	if(((int)((block_size*1024)/sizeof(int)))<numBlocks){
+		printf("Block Size : %d\nNo. of Blocks : %d\n",block_size,numBlocks);
+		perror("Block size too small, FAT cannot be initialized properly!");
+		exit(-1);
 
 	}
 
-	//function to initialize FAT in block 1
-	void initializeFAT( int block_size){
+	// Simulate the disk as a set of contiguous blocks in memory
+	space = (char*)malloc(numBlocks * block_size * 1024);
+}
 
-		//occupy block 1
-		updateBitVector_occupy(1);
+void memory::updateBitVector_occupy( int blockNum){
+	this->space[BIT_VECTOR_OFFSET + blockNum/8] |= (1<<(7-blockNum%8));
+}
 
-		// The data blocks of a file are maintained using a system-wide File Allocation Table (FAT)
-		// It will be stored in Block-1.
+void memory::updateBitVector_free( int blockNum){
+	this->space[BIT_VECTOR_OFFSET + blockNum/8] &= ~(1<<(7-blockNum%8));
+}
 
-		int value = -1;
-		 int Offset = 0;
+void memory::initializeOpenFileTable( int numBlocks,  int block_size){
 
-		//put value -1 for all FAT values
-		for(;Offset<(block_size*1024); Offset+=sizeof( int))
-			this->writeInfo(1, block_size, Offset, (const void*)&value, sizeof(int));
+	/*
+	Single entry of open file table:
+	FAT index (-1 means invalid) , File Open Count
+	*/
+	//occupying the last block for open file table
+	updateBitVector_occupy(numBlocks - 1);
+
+	openFileTableEntry initialStructure;
+
+	for( int Offset = 0; Offset < (block_size*1024); Offset+=sizeof(initialStructure))
+		this->writeInfo(numBlocks-1, block_size, Offset, (const void*)&initialStructure, sizeof(initialStructure));
+}
+
+void memory::initializeDirectory( int directoryBlockNumber,  int block_size){
+
+	//occupy the block
+	updateBitVector_occupy(directoryBlockNumber);
+
+	directoryEntry dirEnt;
+
+	for( int Offset = 0; Offset < (block_size*1024); Offset+=sizeof(dirEnt))
+		this->writeInfo(directoryBlockNumber, block_size, Offset, (const void*)&dirEnt, sizeof(dirEnt));
+
+}
+
+void memory::readInfo( int blockNum,  int offset, void *dest, size_t n){
+	int block_size;
+	getBlockSize(block_size);
+
+	if(offset >= (block_size*1024)){
+		perror("Out of Block error!");
+		exit(-1);
+	}
+
+	memcpy(dest,(const void *)(space + blockNum*block_size*1024 + offset),n);
+}
+
+void memory::getBlockSize( int &block_size){
+	memcpy(&block_size,(const void *)(space + BLOCK_SIZE_OFFSET),sizeof(block_size));
+}
+
+int memory::getBit( int blockNum){
+	return (this->space[BIT_VECTOR_OFFSET + blockNum/8] & (1<<(7-blockNum%8)));
+}
+
+void memory::getFreeBlock( int numBlocks,  int &freeBlock){
+	
+	for(freeBlock = 2; freeBlock<numBlocks ; freeBlock++){
+
+		if(getBit(freeBlock) == 0){
+			return;
+		}
 
 	}
 
-	void initializeOpenFileTable( int numBlocks,  int block_size){
+	perror("All blocks filled!");
+	exit(-1);
+}
 
-		/*
-		Single entry of open file table:
-		FAT index (-1 means invalid) , File Open Count
-		*/
-		//occupying the last block for open file table
-		updateBitVector_occupy(numBlocks - 1);
 
-		openFileTableEntry initialStructure;
+void memory::getFATVal( int index,  int &value){
+	readInfo(1, index*sizeof( int), &value, sizeof( int));
+}
 
-		for( int Offset = 0; Offset < (block_size*1024); Offset+=sizeof(initialStructure))
-			this->writeInfo(numBlocks-1, block_size, Offset, (const void*)&initialStructure, sizeof(initialStructure));
-	}
+void memory::setFATVal( int index,  int value){
+	int block_size;
+	getBlockSize(block_size);
 
-	void initializeDirectory( int directoryBlockNumber,  int block_size){
+	writeInfo(1, block_size, index*sizeof( int), (const void *)&value, sizeof( int));
+}
 
-		//occupy the block
-		updateBitVector_occupy(directoryBlockNumber);
+void memory::writeInfo(int blockNum, int block_size,  int offset, const void *src, size_t n){
+	memcpy((void*)(space + blockNum*block_size*1024 + offset),src,n);
+}
 
-		directoryEntry dirEnt;
+void memory::getNumBytesBitVec( int numBlocks,  int &numBytesBitVec){
+	
+	numBytesBitVec = numBlocks/8;
+	
+	if(numBlocks%8!=0)
+		(numBytesBitVec)++;
 
-		for( int Offset = 0; Offset < (block_size*1024); Offset+=sizeof(dirEnt))
-			this->writeInfo(directoryBlockNumber, block_size, Offset, (const void*)&dirEnt, sizeof(dirEnt));
+}
 
-	}
-};
+//function to create the super block
+void memory::createSuperBlock( int file_sys_size,  int numBlocks,  int block_size){
+
+	 int numBytesBitVec;
+	getNumBytesBitVec(numBlocks, numBytesBitVec);
+
+	 int homeDirOffset;
+	getHomeDirOffset(numBytesBitVec, homeDirOffset);
+
+	//clear block 0 where super block will be stored
+	this->clearBlockContents(0, block_size);
+
+	// Block 0 is the super block which contains:
+	//		Name of variable 						|	Offset
+	// 		Block size 								|	0
+	// 		Size of the file system in MB 			|	8
+	// 		Volume name								|	16
+	// 		Bit vector 								|	24
+	//		Working Directory 						|	BIT_VECTOR_OFFSET + numBytesBitVec
+	// 		Pointer(s) to the directory(ies).		|	homeDirOffset
+
+	// The free blocks are maintained as a bit vector stored in the super block. 
+	// The number of bits will be equal to the number of blocks in the file system.
+	// If the i-th bit is 0, then block i is free; else, it is occupied.
+	updateBitVector_occupy(0);
+
+	char volName[8];
+	char dirName[12];
+
+	bzero((void *)volName, 8);
+	bzero((void *)dirName, 12);
+
+	//block number where directory is stored, second last block
+	int blockNumber = numBlocks - 2;
+
+	initializeDirectory(numBlocks - 2, block_size);
+
+	strcpy(volName, "root");
+	strcpy(dirName, "home");
+
+	//storing block size at block size offset
+	this->writeInfo(0, block_size, BLOCK_SIZE_OFFSET, (const void *)&(block_size), sizeof(block_size));
+	
+	//storing file system size at the respective offset
+	this->writeInfo(0, block_size, FILE_SYS_SIZE_OFFSET, (const void *)&(file_sys_size), sizeof(file_sys_size));
+
+	//storing volume name at the respective offset
+	this->writeInfo(0, block_size, VOLUME_NAME_OFFSET, (const void *)(volName), strlen(volName)+1);
+	
+	//working directory initially is nothing, not even home, so storing nothing
+
+	//storing directory name at the respective offset
+	this->writeInfo(0, block_size, homeDirOffset, (const void *)(dirName),strlen(dirName)+1);
+
+	//storing blockNumber of the home directory at the respective offset
+	this->writeInfo(0, block_size, homeDirOffset + 12, (const void *)&(blockNumber),sizeof(int));
+
+}
+
+//function to initialize FAT in block 1
+void memory::initializeFAT( int block_size){
+
+	//occupy block 1
+	updateBitVector_occupy(1);
+
+	// The data blocks of a file are maintained using a system-wide File Allocation Table (FAT)
+	// It will be stored in Block-1.
+
+	int value = -1;
+	int Offset = 0;
+
+	//put value -1 for all FAT values
+	for(;Offset<(block_size*1024); Offset+=sizeof( int))
+		this->writeInfo(1, block_size, Offset, (const void*)&value, sizeof(int));
+
+}
+
+void memory::getHomeDirOffset( int numBytesBitVec,  int &homeDirOffset){
+	homeDirOffset = BIT_VECTOR_OFFSET + numBytesBitVec + 16;
+}
+
+void memory::clearBlockContents( int blockNum,  int block_size){
+	bzero((void*)(space + blockNum*block_size*1024), block_size*1024);
+}
 
 void getNumBlocks( int file_sys_size,  int block_size,  int &numBlocks){
-	numBlocks = (file_sys_size*1024)/block_size;		//get number of blocks
+	numBlocks = file_sys_size/block_size;		//get number of blocks
 }
 
 memory *disk;
@@ -282,12 +277,12 @@ void getMetaInfoFromDisk( int &file_sys_size,  int &block_size,  int &numBlocks,
 //block 1 : block_size*1024 to 2*block_size*1024-1
 //block 2 : 2*block_size*1024 to 3*block_size*1024 - 1
 
-void generateFileSystem( int file_sys_size,  int block_size){
+void generateFileSystem(int file_sys_size,  int block_size){
 	// These are the inputs during the file system creation
-	// file_sys_size : Size of the file system in MB	(Typical Value : 64MB)
-	// block_size	 : Block Size in KB 				(Typical Value : 1 KB)
+	// file_sys_size : Size of the file system in KB	(Typical Value : 65536	KB)
+	// block_size	 : Block Size in KB 				(Typical Value : 1		KB)
 
-	 int numBlocks;									//variable for number of blocks
+	int numBlocks;									//variable for number of blocks
 	getNumBlocks(file_sys_size, block_size, numBlocks);
 	
 	// Create memory dynamically
@@ -392,7 +387,7 @@ int my_open(char* filename,  int type){
 	disk->updateBitVector_occupy(freeBlock);
 	disk->clearBlockContents(freeBlock, block_size);
 
-	 int openFileTableOffset;
+	int openFileTableOffset;
 
 	updateOpenFileTable(dirEnt, numBlocks, block_size, openFileTableOffset, type);
 
@@ -453,17 +448,15 @@ int goToBlockLevel(int currentBlock, int blockLevel, int &blockLevelNumber){
 // reads data from an already open file
 int my_read(int fd, char *buf, size_t count){
 
+	bzero(buf, count);
+
+	int numBytesBitVec;
 	int numBlocks;
 	int file_sys_size;
 	int block_size;
+	int homeDirOffset;
 
-	//reading file_sys_size from disk
-	disk->readInfo(0, FILE_SYS_SIZE_OFFSET, &file_sys_size, sizeof(file_sys_size));
-
-	//reading block_size from disk
-	disk->getBlockSize(block_size);
-
-	getNumBlocks(file_sys_size, block_size, numBlocks);
+	getMetaInfoFromDisk(file_sys_size, block_size, numBlocks, numBytesBitVec, homeDirOffset);
 
 	if(fd >= block_size*1024){
 		perror("Invalid file descriptor!");
@@ -495,6 +488,7 @@ int my_read(int fd, char *buf, size_t count){
 	if((int)count <= remainingBytesInBlockLevel){
 		disk->readInfo(blockLevelNumber, blockOffset, (void *)buf, count);
 		temp.readFilePointerOffset+=count;
+		disk->writeInfo(numBlocks-1, block_size, fd, &temp, sizeof(temp));
 		return count;
 	}
 	else
@@ -503,9 +497,9 @@ int my_read(int fd, char *buf, size_t count){
 	bytesRead = remainingBytesInBlockLevel;
 
 	int remainingCount = count - bytesRead;
-	int block_count = remainingCount/block_size;
+	int block_count = remainingCount/(block_size*1024);
 
-	if(remainingCount%block_size != 0)	block_count++;
+	if(remainingCount%(block_size*1024) != 0)	block_count++;
 
 	//proceeding towards reading more blocks for the current file
 	int prev = blockLevelNumber, value, q;
@@ -522,16 +516,21 @@ int my_read(int fd, char *buf, size_t count){
 
 		//Read from this block
 		if(q==block_count-1){
+
 			disk->readInfo(prev, 0, (void *)(buf+bytesRead), count - bytesRead);
 			bytesRead = count;
+		
 		}
 		else{
-			disk->readInfo(prev, 0, (void *)(buf+bytesRead), block_size);
-			bytesRead += block_size;
+
+			disk->readInfo(prev, 0, (void *)(buf+bytesRead), block_size*1024);
+			bytesRead += block_size*1024;
+		
 		}
 	}
 
 	temp.readFilePointerOffset+=bytesRead;
+	disk->writeInfo(numBlocks-1, block_size, fd, &temp, sizeof(temp));
 
 	return bytesRead;
 }
@@ -539,8 +538,12 @@ int my_read(int fd, char *buf, size_t count){
 void allocateBlocks(int &prev, int &value, int numBlocks, int block_size){ 
 
 	int freeBlock;
+	// prev = 5;
+	// disk->getFATVal(prev, value);
 
 	disk->getFATVal(prev, value);
+
+	//printf("FAAAAATTTTTGET:%d,,,,%d\n",prev,value);
 
 	if(value == -1){
 		//q-th block is not assigned
@@ -548,6 +551,8 @@ void allocateBlocks(int &prev, int &value, int numBlocks, int block_size){
 
 		//get free block
 		disk->getFreeBlock(numBlocks, freeBlock);
+
+		//printf("FREE:%d\n",freeBlock);
 
 		//occupy free block
 		disk->updateBitVector_occupy(freeBlock);
@@ -557,6 +562,8 @@ void allocateBlocks(int &prev, int &value, int numBlocks, int block_size){
 
 		//update FAT
 		disk->setFATVal(prev, freeBlock);
+
+		//printf("FAAAAATTTTTSET:%d,,,,%d\n",prev,freeBlock);
 
 		//update prev
 		prev = freeBlock;
@@ -570,17 +577,13 @@ void allocateBlocks(int &prev, int &value, int numBlocks, int block_size){
 // writes data into an already open file
 int my_write(int fd, char *buf, size_t count){
 
+	int numBytesBitVec;
 	int numBlocks;
 	int file_sys_size;
 	int block_size;
+	int homeDirOffset;
 
-	//reading file_sys_size from disk
-	disk->readInfo(0, FILE_SYS_SIZE_OFFSET, &file_sys_size, sizeof(file_sys_size));
-
-	//reading block_size from disk
-	disk->getBlockSize(block_size);
-
-	getNumBlocks(file_sys_size, block_size, numBlocks);
+	getMetaInfoFromDisk(file_sys_size, block_size, numBlocks, numBytesBitVec, homeDirOffset);
 
 	if(fd >= block_size*1024){
 		perror("Invalid file descriptor!");
@@ -602,6 +605,7 @@ int my_write(int fd, char *buf, size_t count){
 	blockOffset = (temp.writeFilePointerOffset)%(block_size*1024);
 
 	int q = 1, prev = temp.FATIndex, value;
+	//printf("QQQ%d\n",temp.FATIndex );
 	value = prev;
 
 	for(; q<=blockLevel; q++){
@@ -620,36 +624,43 @@ int my_write(int fd, char *buf, size_t count){
 	if((int)count <= remainingBytesInBlockLevel){
 		disk->writeInfo(value, block_size, blockOffset, (const void *)buf, count);
 		temp.writeFilePointerOffset+=count;
+		disk->writeInfo(numBlocks-1, block_size, fd, &temp, sizeof(temp));
 		return count;
 	}
 	else
 		disk->writeInfo(value, block_size, blockOffset, (const void *)buf, remainingBytesInBlockLevel);
 
+
 	int remainingCount = count - remainingBytesInBlockLevel;
 	int bytesWritten = remainingBytesInBlockLevel;
-	int block_count = remainingCount/block_size;
+	int block_count = remainingCount/(block_size*1024);
 
-	if(remainingCount%block_size != 0)	block_count++;
+	if(remainingCount%(block_size*1024) != 0)	block_count++;
 
 	//proceeding towards allocating more blocks for the current file
 	prev = value;
 
 	for(q=0;q<block_count;q++){
 
+		//printf("TTT%d\n",prev);
 		allocateBlocks(prev,value,numBlocks,block_size);
-
+		//printf("WWW%d\n",prev);
 		//write on this block
 		if(q==block_count-1){
+
 			disk->writeInfo(prev, block_size, 0, (const void *)(buf+bytesWritten), count - bytesWritten);
 			bytesWritten = count;
+		
 		}
 		else{
-			disk->writeInfo(prev, block_size, 0, (const void *)(buf+bytesWritten), block_size);
-			bytesWritten+=block_size;
+			disk->writeInfo(prev, block_size, 0, (const void *)(buf+bytesWritten), block_size*1024);
+			bytesWritten+=block_size*1024;
 		}
 	}
 
+
 	temp.writeFilePointerOffset+=bytesWritten;
+	disk->writeInfo(numBlocks-1, block_size, fd, &temp, sizeof(temp));
 	return bytesWritten;
 }
 
@@ -772,16 +783,8 @@ void my_cat(){
 
 int main(){	
 
-	generateFileSystem(32, 16);
-	int value;
-	disk->getFATVal(5,value);
-	printf("%d\n", value);
-	value = 4;
-	disk->setFATVal(5,value);
-	disk->getFATVal(5,value);
-	printf("%d\n", value);
-	disk->getFATVal(6,value);
-	printf("%d\n", value);
+	generateFileSystem(128, 1);
+
 	my_chdir((char*)"home");
 	printf("%d\n",my_open((char*)"hey", READ_ONLY));
 	my_close(0);
@@ -789,19 +792,45 @@ int main(){
 	printf("%d\n",my_open((char*)"hey2", READ_ONLY));
 	my_close(0);
 	printf("%d\n",my_open((char*)"hey2", READ_ONLY));
-	printf("%d\n",my_open((char*)"hey2", READ_WRITE));
-	
-
-	my_write(32, (char *)"dsvdwvwrgvrwgvdsvdwvwrgvrwgv dsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgv",1000);
-	
-	char buf[1000];
-	my_read(32, buf, 1000);
-
-	my_close(32);
 	my_close(0);
 	my_close(16);
 
-	printf("%s\n",buf);
+	printf("%d\n",my_open((char*)"hey2", READ_WRITE));
+	
+	char buffer[10000];
+
+	strcpy(buffer, "dsvdwvwrgvrwgvdsvdwvwrgvrwgv dsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgv dsvdwvwrgvrwgvdsvdwvwrgvrwgv dsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgv dsvdwvwrgvrwgvdsvdwvwrgvrwgv dsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgv dsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgv dsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgv dsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgv ds 1111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111222222222222222222222222222222222222222222222222222222222222222333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222222211111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111");
+
+	my_write(0, (char *)buffer,5000);
+	
+	// char qwerty[10000];
+
+	// disk->readInfo(3,0, (void *)&qwerty, 1024);
+	// printf("3 : %s\n\n\n",qwerty);
+
+	// disk->readInfo(4,0, (void *)&qwerty, 1024);
+	// printf("4 : %s\n\n\n",qwerty);
+
+	// disk->readInfo(5,0, (void *)&qwerty, 1024);
+	// printf("5 : %s\n\n\n",qwerty);
+
+	// disk->readInfo(6,0, (void *)&qwerty, 1024);
+	// printf("6 : %s\n\n\n",qwerty);
+
+
+	char buf[10000];
+	// my_read(32, buf, 1);
+	// printf("%s",buf);
+	// my_read(32, buf, 1);
+	// printf("%s",buf);
+	my_read(0, (char *)buf, 1000);
+	printf("%s\n\n\n",buf);
+	my_read(0, (char *)buf, 4000);
+	printf("%s\n\n\n",buf);
+	//my_read(32, (char *)buf, 5000);
+	//printf("%s\n\n\n",buf);
+
+	my_close(0);
 
 	return 0;
 }

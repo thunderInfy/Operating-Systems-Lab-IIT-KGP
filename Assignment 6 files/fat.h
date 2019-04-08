@@ -17,6 +17,7 @@
 #define READ_WRITE		2
 #define INVALID_TYPE	3
 
+
 struct openFileTableEntry{
 
 	int FATIndex;

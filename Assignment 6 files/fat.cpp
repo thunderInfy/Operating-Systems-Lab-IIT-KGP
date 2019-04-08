@@ -451,11 +451,7 @@ int goToBlockLevel(int currentBlock, int blockLevel, int &blockLevelNumber){
 
 
 // reads data from an already open file
-int my_read(int fd, void *buffer, size_t count){
-
-	char* buf;
-
-	buf = (char*)buffer;
+int my_read(int fd, char *buf, size_t count){
 
 	int numBlocks;
 	int file_sys_size;
@@ -486,15 +482,15 @@ int my_read(int fd, void *buffer, size_t count){
 	int bytesRead = 0;
 	int blockLevel, blockOffset, blockLevelNumber;
 
-	blockLevel = (temp.readFilePointerOffset)/block_size;
-	blockOffset = (temp.readFilePointerOffset)%block_size;
+	blockLevel = (temp.readFilePointerOffset)/(block_size*1024);
+	blockOffset = (temp.readFilePointerOffset)%(block_size*1024);
 
 	if(goToBlockLevel(temp.FATIndex, blockLevel, blockLevelNumber) < 0){
 		perror("Read File Pointer already at end!");
 		return 0;
 	}
 
-	int remainingBytesInBlockLevel = block_size - blockOffset;
+	int remainingBytesInBlockLevel = block_size*1024 - blockOffset;
 
 	if((int)count <= remainingBytesInBlockLevel){
 		disk->readInfo(blockLevelNumber, blockOffset, (void *)buf, count);
@@ -572,11 +568,7 @@ void allocateBlocks(int &prev, int &value, int numBlocks, int block_size){
 
 
 // writes data into an already open file
-int my_write(int fd, const void *buffer, size_t count){
-
-	char* buf;
-
-	buf = (char*)buffer;
+int my_write(int fd, char *buf, size_t count){
 
 	int numBlocks;
 	int file_sys_size;
@@ -606,8 +598,8 @@ int my_write(int fd, const void *buffer, size_t count){
 	//write operation is allowed
 	int blockLevel, blockOffset;
 
-	blockLevel = (temp.writeFilePointerOffset)/block_size;
-	blockOffset = (temp.writeFilePointerOffset)%block_size;
+	blockLevel = (temp.writeFilePointerOffset)/(block_size*1024);
+	blockOffset = (temp.writeFilePointerOffset)%(block_size*1024);
 
 	int q = 1, prev = temp.FATIndex, value;
 	value = prev;
@@ -621,7 +613,7 @@ int my_write(int fd, const void *buffer, size_t count){
 		allocateBlocks(prev,value,numBlocks,block_size);
 	}
 
-	int remainingBytesInBlockLevel = block_size - blockOffset;
+	int remainingBytesInBlockLevel = block_size*1024 - blockOffset;
 
 	//write in blockLevel block, value contains the blockNumber corresponding to blockLevel
 	
@@ -800,10 +792,14 @@ int main(){
 	printf("%d\n",my_open((char*)"hey2", READ_WRITE));
 	
 
-	my_write(32, (const void *)"dsvdwvwrgvrwgv",20);
+	my_write(32, (char *)"dsvdwvwrgvrwgvdsvdwvwrgvrwgv dsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgvdsvdwvwrgvrwgv",1000);
 	
-	char* buf;
-	my_read(32, (void *)buf, 20);
+	char buf[1000];
+	my_read(32, buf, 1000);
+
+	my_close(32);
+	my_close(0);
+	my_close(16);
 
 	printf("%s\n",buf);
 

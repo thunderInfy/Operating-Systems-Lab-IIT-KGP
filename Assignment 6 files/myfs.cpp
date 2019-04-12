@@ -1,4 +1,8 @@
 #include <bits/stdc++.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 using namespace std;
 
 #define MIN_SIZE 32
@@ -109,10 +113,10 @@ int wd;
 vector<struct files> open_files;
 
 
-void my_mount() {
+bool my_mount() {
 
 	wd = 0;
-	wd_inode = (struct inode *)(disk->space + block_size);
+	struct inode *wd_inode = (struct inode *)(disk->space + block_size);
 	wd_inode->valid = true;
 	wd_inode->file = true;
 	wd_inode->file_size = 0;
@@ -125,6 +129,8 @@ void my_mount() {
 
 	struct files open_file(wd, 0, wd_inode->file_size);
 	open_files.push_back(open_file);
+
+	return true;
 }
 
 void init(unsigned int file_sys_size, unsigned int block_size_kb, char *name) {
@@ -209,7 +215,7 @@ int getFreeInode() {
 }
 
 int getFreeBlock() {
-	struct superblock *sb = disk->space;
+	struct superblock *sb = (struct superblock *)disk->space;
 	int curr_free = sb->first_free_block;
 
 	if(curr_free == -1) return -1;
@@ -285,7 +291,7 @@ unsigned long long write_file(struct inode *fd_ptr, char *buf, unsigned long lon
 		}
 	}
 
-	int sip_addr = *((int *)fd_ptr->sip);
+	int sip_addr = fd_ptr->sip;
 
 	if(sip_addr == -1) {
 		sip_addr = getFreeBlock();
@@ -302,7 +308,7 @@ unsigned long long write_file(struct inode *fd_ptr, char *buf, unsigned long lon
 		return bytes_written;
 	}
 
-	int dip_addr = *((int *)fd_ptr->dip);
+	int dip_addr = fd_ptr->dip;
 	if(dip_addr == -1) {
 		dip_addr = getFreeBlock();
 		fd_ptr->dip = dip_addr;
@@ -396,7 +402,7 @@ unsigned long long read_file(struct inode *fd_ptr, char *buf, unsigned long long
 		else return bytes_read;
 	}
 
-	int sip_addr = *((int *)fd_ptr->sip);
+	int sip_addr = fd_ptr->sip;
 	if(sip_addr == -1) return bytes_read;
 
 	bytes_read += read_block_pointers(sip_addr, p.pointer, p.sip, buf, count - bytes_read);
@@ -404,7 +410,7 @@ unsigned long long read_file(struct inode *fd_ptr, char *buf, unsigned long long
 		return bytes_read;
 	}
 
-	int dip_addr = *((int *)fd_ptr->dip);
+	int dip_addr = fd_ptr->dip;
 	if(dip_addr == -1) return bytes_read;
 
 	int *block_addr = (int *)(disk->space + block_size*dip_addr);
@@ -455,7 +461,7 @@ bool parse_path(int &curr, char *file) {
 
 	struct dentry *d = (struct dentry *)buf;
 
-	for(int i=0; i<(curr_inode)/sizeof(dentry); i++) {
+	for(int i=0; i<block_size/sizeof(dentry); i++) {
 		if(!strcmp(d->filename, file)) {
 			curr = d->f_inode_n;
 			return true;
@@ -507,7 +513,7 @@ int my_open(const char *filename) {
 
 	int fnode = getFreeInode();
 	struct dentry file_data;
-	strcpy(file_data->filename, args[n-1]);
+	strcpy(file_data.filename, args[n-1]);
 	file_data.f_inode_n = fnode;
 	write_file(curr_inode, (char *)&file_data, curr_inode->file_size, sizeof(file_data));
 
@@ -568,7 +574,7 @@ bool my_copy(int fd, const char *path) {
 
 bool my_copy(const char *path, int fd) {
 
-	int f = open(target, O_WRONLY|O_CREAT|O_TRUNC);
+	int f = open(path, O_WRONLY|O_CREAT|O_TRUNC);
 	if(f < 0) return false;
 
 	int fnode = open_files[fd].inode_n;

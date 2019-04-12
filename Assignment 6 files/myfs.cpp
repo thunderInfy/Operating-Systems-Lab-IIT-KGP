@@ -195,7 +195,18 @@ bool get_location(struct pointer_location &p) {
 	return true;
 }
 
-int getFreeInode();
+int getFreeInode() {
+	struct inode *iptr = (struct inode *)(disk->space + block_size);
+	int fnode = 0;
+
+	for(int fnode=0; fnode<2*block_size/sizeof(inode); fnode++) {
+		if(!iptr->valid) {
+			return fnode;
+		}
+	}
+
+	return -1;
+}
 
 int getFreeBlock() {
 	struct superblock *sb = disk->space;

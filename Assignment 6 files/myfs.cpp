@@ -202,7 +202,7 @@ int getFreeInode() {
 	struct inode *iptr = (struct inode *)(disk->space + block_size);
 	int fnode = 0;
 
-	for(int fnode=0; fnode<2*block_size/sizeof(inode); fnode++) {
+	for(int fnode=0; fnode<2*block_size/sizeof(struct inode); fnode++) {
 		if(!(iptr + fnode)->valid) {
 			return fnode;
 		}
@@ -340,7 +340,7 @@ unsigned long long my_write(int fd, char *buf, unsigned long long count) {
 	int fnode = open_files[fd].inode_n;
 	unsigned long long wp = open_files[fd].write_pointer;
 
-	struct inode* fd_ptr = (struct inode *)(disk->space + block_size + fnode*sizeof(fnode));
+	struct inode* fd_ptr = (struct inode *)(disk->space + block_size + fnode*sizeof(struct inode));
 
 	unsigned long long bytes_written = 0;
 	
@@ -428,7 +428,7 @@ unsigned long long my_read(int fd, char *buf, unsigned long long count) {
 	int fnode = open_files[fd].inode_n;
 	unsigned long long rp = open_files[fd].read_pointer;
 
-	struct inode* fd_ptr = (struct inode *)(disk->space + block_size + fnode*sizeof(fnode));
+	struct inode* fd_ptr = (struct inode *)(disk->space + block_size + fnode*sizeof(struct inode));
 
 	unsigned long long bytes_read = 0;
 
@@ -451,7 +451,7 @@ int breakString(char **list,char *str,const char *delim) {
 
 bool parse_path(int &curr, char *file) {
 
-	struct inode *curr_inode = (struct inode *)(disk->space + block_size + curr*sizeof(inode));
+	struct inode *curr_inode = (struct inode *)(disk->space + block_size + curr*sizeof(struct inode));
 	char *buf = (char *)malloc(curr_inode->file_size);
 
 	if(curr_inode->file == true || curr_inode->valid == false) return -1;
@@ -496,7 +496,7 @@ int my_open(const char *filename) {
 		return -1;
 	}
 
-	struct inode *curr_inode = (struct inode *)(disk->space + block_size + curr*sizeof(inode));
+	struct inode *curr_inode = (struct inode *)(disk->space + block_size + curr*sizeof(struct inode));
 	char *buf = (char *)malloc(curr_inode->file_size);
 	read_file(curr_inode, buf, 0, curr_inode->file_size);
 	
@@ -516,7 +516,7 @@ int my_open(const char *filename) {
 	file_data.f_inode_n = fnode;
 	write_file(curr_inode, (char *)&file_data, curr_inode->file_size, sizeof(file_data));
 
-	struct inode *f_inode = (struct inode *)(disk->space + block_size + fnode * sizeof(inode));
+	struct inode *f_inode = (struct inode *)(disk->space + block_size + fnode * sizeof(struct inode));
 	f_inode->valid = true;
 	f_inode->file = true;
 	f_inode->file_size = 0;
@@ -539,7 +539,7 @@ unsigned long long my_cat(int fd, char *buf) {
 	int fnode = open_files[fd].inode_n;
 	unsigned long long rp = 0;
 
-	struct inode* fd_ptr = (struct inode *)(disk->space + block_size + fnode*sizeof(fnode));
+	struct inode* fd_ptr = (struct inode *)(disk->space + block_size + fnode*sizeof(struct inode));
 
 	unsigned long long bytes_read = 0;
 

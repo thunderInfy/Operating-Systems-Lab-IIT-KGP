@@ -127,9 +127,6 @@ bool my_mount() {
 	wd_inode->sip = -1;
 	wd_inode->dip = -1;
 
-	struct files open_file(wd, 0, wd_inode->file_size);
-	open_files.push_back(open_file);
-
 	return true;
 }
 

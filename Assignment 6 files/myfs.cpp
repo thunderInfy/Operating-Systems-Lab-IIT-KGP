@@ -203,7 +203,7 @@ int getFreeInode() {
 	int fnode = 0;
 
 	for(int fnode=0; fnode<2*block_size/sizeof(inode); fnode++) {
-		if(!iptr->valid) {
+		if(!(iptr + fnode)->valid) {
 			return fnode;
 		}
 	}
@@ -402,7 +402,7 @@ unsigned long long read_file(struct inode *fd_ptr, char *buf, unsigned long long
 	int sip_addr = fd_ptr->sip;
 	if(sip_addr == -1) return bytes_read;
 
-	bytes_read += read_block_pointers(sip_addr, p.pointer, p.sip, buf, count - bytes_read);
+	bytes_read += read_block_pointers(sip_addr, p.pointer, p.sip, buf + bytes_read, count - bytes_read);
 	if(bytes_read == count) {
 		return bytes_read;
 	}

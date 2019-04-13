@@ -454,6 +454,8 @@ bool parse_path(int &curr, char *file) {
 	struct inode *curr_inode = (struct inode *)(disk->space + block_size + curr*sizeof(inode));
 	char *buf = (char *)malloc(curr_inode->file_size);
 
+	if(curr_inode->file == true || curr_inode->valid == false) return -1;
+
 	read_file(curr_inode, buf, 0, curr_inode->file_size);
 
 	struct dentry *d = (struct dentry *)buf;

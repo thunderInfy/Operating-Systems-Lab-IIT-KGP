@@ -596,6 +596,8 @@ unsigned long long read_file(struct inode *fd_ptr, char *buf, unsigned long long
 	}
 
 	int dip_addr = fd_ptr->dip;
+
+	//if dip_addr is invalid, then nothing more to read
 	if(dip_addr == -1) return bytes_read;
 
 	int *block_addr = (int *)(disk->space + block_size*dip_addr);

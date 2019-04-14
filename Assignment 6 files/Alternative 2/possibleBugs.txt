@@ -23,3 +23,15 @@
 		OR
 
 	n_entries = data_size/sizeof(int), NEED TO SET ONE STANDARD IN THE ENTIRE PROGRAM
+
+4) int *block_addr = (int *)(disk->space + block_size*dip_addr);
+	for(int i=p.dip[0]; i<data_size/sizeof(int); i++) {
+		int blk = *(block_addr + i);
+
+		bytes_read += read_block_pointers(blk, p.pointer, p.dip[1], buf + bytes_read, count - bytes_read);
+		if(bytes_read == count) {
+			return bytes_read;
+		}
+	}
+
+	What if blk is -1 in this code as well?

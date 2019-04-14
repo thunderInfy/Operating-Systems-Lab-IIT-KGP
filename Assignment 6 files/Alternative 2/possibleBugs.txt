@@ -35,3 +35,8 @@
 	}
 
 	What if blk is -1 in this code as well?
+
+5) if(curr_inode->file == true || curr_inode->valid == false) return -1;
+
+	-1 is actually true, should return false
+	This I changed from -1 to false, because there's no doubt in this.

@@ -645,20 +645,28 @@ bool parse_path(int &curr, char *file) {
 	struct inode *curr_inode = (struct inode *)(disk->space + block_size + curr*sizeof(struct inode));
 	
 	//intermediate inodes should be valid directories
-	if(curr_inode->file == true || curr_inode->valid == false) return -1;
+	if(curr_inode->file == true || curr_inode->valid == false) return false;
 
 	char *buf = (char *)malloc(curr_inode->file_size);
 
+	//read directory in the buffer
 	read_file(curr_inode, buf, 0, curr_inode->file_size);
 
 	struct dentry *d = (struct dentry *)buf;
 
 	for(int i=0; i<block_size/sizeof(dentry); i++) {
+		
+		//finding file in the directory
+
 		if(!strcmp(d->filename, file)) {
+
+			//setting curr val to inode of the file found
 			curr = d->f_inode_n;
 			return true;
 		}
 	}
+
+	//file not found in the directory
 	return false;
 }
 
@@ -693,6 +701,8 @@ int my_open(const char *filename) {
 			return -1;
 		}
 	}
+
+	//curr is now inode of the directory in which the file is residing
 
 	//filename is too long
 	if(strlen(args[n-1])>13) {

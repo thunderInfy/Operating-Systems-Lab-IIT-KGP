@@ -40,3 +40,7 @@
 
 	-1 is actually true, should return false
 	This I changed from -1 to false, because there's no doubt in this.
+
+
+6) 	open files vector's size keeps on increasing, instead of always appending at the end of open files vector, it would be a better idea to search for any open file vector element whose inode_n is -1. If not found, then of course, appending is the only option.
+	

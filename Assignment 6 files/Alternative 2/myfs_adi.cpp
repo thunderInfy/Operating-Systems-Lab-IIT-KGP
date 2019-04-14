@@ -702,18 +702,21 @@ int my_open(const char *filename) {
 		}
 	}
 
-	//curr is now inode of the directory in which the file is residing
-
 	//filename is too long
 	if(strlen(args[n-1])>13) {
 		printf("Too long file name");
 		return -1;
 	}
 
+	//curr is now inode of the directory in which the file is residing
+
 	struct inode *curr_inode = (struct inode *)(disk->space + block_size + curr*sizeof(struct inode));
 	char *buf = (char *)malloc(curr_inode->file_size);
+
+	//reading current directory contents in buf
 	read_file(curr_inode, buf, 0, curr_inode->file_size);
 	
+	//searching for file in the directory
 	struct dentry *d = (struct dentry *)buf;
 	for(int i=0; i<sizeof(buf)/sizeof(dentry); i++) {
 		if(!strcmp(d->filename, args[n-1])) {
@@ -724,19 +727,27 @@ int my_open(const char *filename) {
 		}
 	}
 
-	int fnode = getFreeInode();
-	struct dentry file_data;
+	//file not found
+
+	int fnode = getFreeInode();						//get free inode
+	
+	//updating directory
+	struct dentry file_data;						
 	strcpy(file_data.filename, args[n-1]);
 	file_data.f_inode_n = fnode;
+	
+	//writing in current directory
 	curr_inode->file_size += write_file(curr_inode, (char *)&file_data, curr_inode->file_size, sizeof(file_data));
 
 	struct inode *f_inode = (struct inode *)(disk->space + block_size + fnode * sizeof(struct inode));
-	f_inode->valid = true;
-	f_inode->file = true;
-	f_inode->file_size = 0;
+	f_inode->valid = true;					//the inode is now valid
+	f_inode->file = true;					//it is a file
+	f_inode->file_size = 0;					//file_size is 0
+
+	//initializing inode to default values
 
 	for(int i=0; i<NUMBER_OF_DP; i++) {
-		f_inode->dp[i] = -1;
+		f_inode->dp[i] = -1;				
 	}
 
 	f_inode->sip = -1;

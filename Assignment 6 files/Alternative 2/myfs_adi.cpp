@@ -176,9 +176,18 @@ bool my_mount() {
 	wd = 0;
 	iptr->valid = true;													//this inode is valid
 
-	//struct dentry temp;
-	//strcpy(temp.filename, ".");
+	//adding the directory entry "."
 
+	struct dentry temp;
+	strcpy(temp.filename, ".");											// . is the current directory
+	temp.f_inode_n = 0;
+	iptr->file_size += write_file(iptr, (char *)&temp, iptr->file_size, sizeof(temp));
+
+	//adding the directory entry "."
+	
+	strcpy(temp.filename, "..");										// .. is the parent directory
+	temp.f_inode_n = 0;													//root's parent is root itself
+	iptr->file_size += write_file(iptr, (char *)&temp, iptr->file_size, sizeof(temp));
 
 	//mount successfully done
 	return true;

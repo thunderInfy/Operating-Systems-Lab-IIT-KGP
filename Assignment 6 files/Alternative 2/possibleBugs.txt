@@ -17,3 +17,9 @@
 	}
 
 	What if blk is -1 in this code?
+
+3) 	n_entries = block_size/sizeof(int)
+
+		OR
+
+	n_entries = data_size/sizeof(int), NEED TO SET ONE STANDARD IN THE ENTIRE PROGRAM

@@ -184,7 +184,7 @@ bool my_mount() {
 	iptr->file_size += write_file(iptr, (char *)&temp, iptr->file_size, sizeof(temp));
 
 	//adding the directory entry "."
-	
+
 	strcpy(temp.filename, "..");										// .. is the parent directory
 	temp.f_inode_n = 0;													//root's parent is root itself
 	iptr->file_size += write_file(iptr, (char *)&temp, iptr->file_size, sizeof(temp));
@@ -334,7 +334,7 @@ unsigned long long write_block_pointers(int ptr_block, unsigned long long offset
 	//offset is the point from where writing will be started
 	//start is the starting block index
 	//buf is the buffer to write
-	//count is the length of characters to write
+	//count is the number of characters to write
 
 	int *block_addr = (int *)(disk->space + ptr_block*block_size);
 	unsigned long long n_entries = data_size/sizeof(int);
@@ -529,6 +529,12 @@ unsigned long long my_write(int fd, char *buf, unsigned long long count) {
 
 unsigned long long read_block_pointers(int ptr_block, unsigned long long offset, int start, char *buf, unsigned long long count) {
 
+	//ptr_block is the block which holds pointers to other blocks
+	//offset is the point from where reading will be started
+	//start is the starting block index
+	//buf is the buffer to which data will be written after reading from data block
+	//count is the number of characters to read
+
 	int *block_addr = (int *)(disk->space + ptr_block*block_size);
 	unsigned long long n_entries = data_size/sizeof(int);
 
@@ -562,19 +568,27 @@ unsigned long long read_file(struct inode *fd_ptr, char *buf, unsigned long long
 
 	for(int i=p.dp; i<NUMBER_OF_DP; i++) {
 		if(fd_ptr->dp[i] != -1 && count > bytes_read) {
+
+			//block exists and bytes are left to read
+
 			datablock db(disk->space + fd_ptr->dp[i]*block_size, block_size);
 
+			//read bytes from data block
 			bytes_read += db.get_data(buf + bytes_read, count - bytes_read, p.pointer);
 			p.pointer = 0;
 
 			if(bytes_read == count) 
 				return bytes_read;
 		}
-		else return bytes_read;
+		else 
+			return bytes_read;
 	}
 
 	int sip_addr = fd_ptr->sip;
-	if(sip_addr == -1) return bytes_read;
+	
+	//if sip_addr is invalid, then nothing to read
+	if(sip_addr == -1) 
+		return bytes_read;
 
 	bytes_read += read_block_pointers(sip_addr, p.pointer, p.sip, buf + bytes_read, count - bytes_read);
 	if(bytes_read == count) {
@@ -669,12 +683,16 @@ int my_open(const char *filename) {
 		curr = wd;										//current directory same as working directory
 
 	for(int i=0; i<n-1; i++) {
+
+		//check if the intermediate names are valid directories
+
 		if(!parse_path(curr, (char *)args[i])) {
-			printf("Wrong Path\n");
+			perror("Wrong Path\n");
 			return -1;
 		}
 	}
 
+	//filename is too long
 	if(strlen(args[n-1])>13) {
 		printf("Too long file name");
 		return -1;

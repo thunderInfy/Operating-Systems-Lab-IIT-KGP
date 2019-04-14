@@ -44,3 +44,6 @@
 
 6) 	open files vector's size keeps on increasing, instead of always appending at the end of open files vector, it would be a better idea to search for any open file vector element whose inode_n is -1. If not found, then of course, appending is the only option.
 	
+7)	
+	Is there any reason why're you not resetting the write_pointer in my_close?
+	open_files[fd].write_pointer = 0;

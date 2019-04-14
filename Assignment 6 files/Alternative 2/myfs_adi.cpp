@@ -671,8 +671,16 @@ bool parse_path(int &curr, char *file) {
 }
 
 int my_close(int fd) {
+
+	if(fd >= open_files.size()){
+		return -1;
+	}
+
+	//inode becomes invalid and read_pointer of the file is reset to 0
 	open_files[fd].inode_n = -1;
 	open_files[fd].read_pointer = 0;
+
+	return 0;
 }
 
 int my_open(const char *filename) {
@@ -721,6 +729,8 @@ int my_open(const char *filename) {
 	for(int i=0; i<sizeof(buf)/sizeof(dentry); i++) {
 		if(!strcmp(d->filename, args[n-1])) {
 
+			//updating the open files vector
+
 			struct files open_file(d->f_inode_n, 0, 0);
 			open_files.push_back(open_file);
 			return open_files.size()-1;
@@ -752,6 +762,8 @@ int my_open(const char *filename) {
 
 	f_inode->sip = -1;
 	f_inode->dip = -1;
+
+	//updating the open files vector
 
 	struct files open_file(fnode, 0, 0);
 	open_files.push_back(open_file);

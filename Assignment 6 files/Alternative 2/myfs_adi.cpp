@@ -1,23 +1,4 @@
-#include <cstring>
-#include <cstdio>
-#include <cstdlib>
-#include <vector>
-#include <climits>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-using namespace std;
-
-#define MIN_BLOCK_SIZE 32							//32 is arbitrary
-#define KB_TO_BYTES 1024
-#define START_DATA_BLOCK 3
-#define NUMBER_OF_DP 5
-#define MAX_PATH 100
-#define TYPE_DIR false
-#define TYPE_FILE true
-#define VALID true
-#define INVALID false
+#include "myfs.h"
 
 struct superblock {
 	char volume_name[8];
@@ -59,6 +40,10 @@ struct datablock {
 
 	int get_pointer() {
 		return *next;
+	}
+
+	void eraseDataBlock(){
+		bzero(data, dsize + sizeof(int));
 	}
 
 	unsigned long long set_data(char *val, unsigned long long len, unsigned long long offset = 0) {
@@ -115,6 +100,7 @@ struct memory {
 
 	memory(long long total_size) {
 		space = (char *)malloc(total_size);
+		bzero(space, total_size);
 	}
 
 	~memory() {
@@ -129,16 +115,6 @@ unsigned long long data_size;
 int wd;								//wd is the inode number of the working directory
 vector<struct files> open_files;
 
-//API function prototypes
-int my_open(const char *filename);
-int my_close(int fd);
-unsigned long long my_read(int fd, char *buf, unsigned long long count);
-unsigned long long my_write(int fd, char *buf, unsigned long long count);
-
-bool my_copy(int fd, const char *path);
-bool my_copy(const char *path, int fd);
-unsigned long long my_cat(int fd, char *buf);
-
 
 //other function prototypes
 bool my_mount();
@@ -147,7 +123,7 @@ bool get_location(struct pointer_location &p);
 int getFreeInode();
 int getFreeBlock();
 unsigned long long write_block_pointers(int ptr_block, unsigned long long offset, int start, char *buf, unsigned long long count);
-unsigned long long write_file(struct inode *fd_ptr, char *buf, unsigned long long write_pointer, unsigned long long count);
+unsigned long long write_file(struct inode *fd_ptr, char *buf, unsigned long long write_pointer, unsigned long long count, int flag = 0);
 unsigned long long read_block_pointers(int ptr_block, unsigned long long offset, int start, char *buf, unsigned long long count);
 unsigned long long read_file(struct inode *fd_ptr, char *buf, unsigned long long read_pointer, unsigned long long count);
 int breakString(char **list,char *str,const char *delim);
@@ -389,7 +365,7 @@ unsigned long long write_block_pointers(int ptr_block, unsigned long long offset
 
 }
 
-unsigned long long write_file(struct inode *fd_ptr, char *buf, unsigned long long write_pointer, unsigned long long count) {
+unsigned long long write_file(struct inode *fd_ptr, char *buf, unsigned long long write_pointer, unsigned long long count, int flag) {
 
 	//fd_ptr is the inode pointer in consideration
 	//buf is the data to be written
@@ -429,6 +405,20 @@ unsigned long long write_file(struct inode *fd_ptr, char *buf, unsigned long lon
 
 			//dp[i] points to some block
 
+			if(flag == 1){
+				//fd_ptr->dp[i] represents a free block
+
+				int blockNumber = fd_ptr->dp[i];
+
+				// super block structure pointer points to the starting of the disk space
+				struct superblock *sb = (struct superblock *)disk->space;
+
+				datablock db(disk->space + blockNumber*block_size, block_size);
+				db.eraseDataBlock();
+				db.set_pointer(sb->first_free_block);
+				sb->first_free_block = blockNumber;
+			}
+			
 			datablock db(disk->space + fd_ptr->dp[i]*block_size, block_size);
 			bytes_written += db.set_data(buf + bytes_written, count - bytes_written, p.pointer);
 			p.pointer = 0;
@@ -680,10 +670,10 @@ bool parse_path(int &curr, char *file) {
 		
 		//finding file in the directory
 
-		if(!strcmp(d->filename, file)) {
+		if(!strcmp((d+i)->filename, file)) {
 
 			//setting curr val to inode of the file found
-			curr = d->f_inode_n;
+			curr = (d+i)->f_inode_n;
 			return true;
 		}
 	}
@@ -734,7 +724,7 @@ int my_open(const char *filename) {
 
 	//filename is too long
 	if(strlen(args[n-1])>13) {
-		printf("Too long file name");
+		printf("Name is too long");
 		return -1;
 	}
 
@@ -797,17 +787,18 @@ int my_open(const char *filename) {
 	return open_files.size()-1;
 }
 
-unsigned long long my_cat(int fd, char *buf) {
+unsigned long long my_cat(int fd) {
+
+	char *buf;
 
 	int fnode = open_files[fd].inode_n;
-	unsigned long long rp = 0;
 
 	struct inode* fd_ptr = (struct inode *)(disk->space + block_size + fnode*sizeof(struct inode));
 
 	unsigned long long bytes_read = 0;
 
 	buf = (char *)malloc(fd_ptr->file_size);
-	bytes_read = read_file(fd_ptr, buf, rp, fd_ptr->file_size);
+	bytes_read = read_file(fd_ptr, buf, 0, fd_ptr->file_size);
 
 	for(int i=0; i<(fd_ptr->file_size); i++) {
 		printf("%c",buf[i]);
@@ -829,14 +820,18 @@ bool my_copy(int fd, const char *path) {
 
 	char *buf = (char *)malloc(FSIZE);
 	read(f, buf, FSIZE);
-	my_write(fd, buf, FSIZE);
+	
+	struct inode *fd_ptr = (struct inode *)(disk->space + block_size + fnode*sizeof(struct inode));
+
+	fd_ptr->file_size = write_file(fd_ptr, buf, 0, FSIZE);
+
 
 	return true;
 }
 
 bool my_copy(const char *path, int fd) {
 
-	int f = open(path, O_WRONLY|O_CREAT|O_TRUNC);
+	int f = open(path, O_WRONLY|O_CREAT|O_TRUNC,S_IRWXU);
 	if(f < 0) return false;
 
 	int fnode = open_files[fd].inode_n;
@@ -845,12 +840,299 @@ bool my_copy(const char *path, int fd) {
 	struct inode *fd_ptr = (struct inode *)(disk->space + block_size + fnode*sizeof(struct inode));
 
 	char *buf = (char *)malloc(fd_ptr->file_size);
-	my_read(fd, buf, fd_ptr->file_size);
+
+	read_file(fd_ptr, buf, 0, fd_ptr->file_size);
 	write(f, buf, fd_ptr->file_size);
 
 	return true;
 }
 
-int main() {
+int my_mkdir(const char *filename){
+
+	//takes filename as input which is the path
+	
+	char *args[MAX_PATH];
+	char path[MAX_PATH];
+
+	strcpy(path, filename);
+
+	int n = breakString(args, path, "/\n");				//args[n] = NULL
+
+	int curr;
+	if(filename[0] == '/') 
+		curr = 0;										//current directory is root
+	else
+		curr = wd;										//current directory same as working directory
+
+	// for(int i=0;i<n;i++){
+	// 	cout<<args[i]<<'\n';
+	// }
+	// cout<<wd<<'\n';
+	// fflush(NULL);
+
+	for(int i=0; i<n-1; i++) {
+
+		//check if the intermediate names are valid directories
+
+		if(!parse_path(curr, (char *)args[i])) {
+			perror("Wrong Path\n");
+			return -1;
+		}
+	}
+
+	//filename is too long
+	if(strlen(args[n-1])>13) {
+		printf("Name is too long");
+		return -1;
+	}
+
+	//curr is now inode of the directory in which the file is residing
+
+	struct inode *curr_inode = (struct inode *)(disk->space + block_size + curr*sizeof(struct inode));
+	char *buf = (char *)malloc(curr_inode->file_size);
+
+	//reading current directory contents in buf
+	read_file(curr_inode, buf, 0, curr_inode->file_size);
+	
+	//searching for file in the directory
+	struct dentry *d = (struct dentry *)buf;
+	for(int i=0; i<curr_inode->file_size/sizeof(dentry); i++) {
+		// previously d was not increased
+		if(!strcmp((d+i)->filename, args[n-1])) {
+			return 0;
+		}
+	}
+
+	//file not found
+
+	int fnode = getFreeInode();						//get free inode
+	
+	//updating directory
+	struct dentry file_data;						
+	strcpy(file_data.filename, args[n-1]);
+	file_data.f_inode_n = fnode;
+	
+	//writing in current directory
+	curr_inode->file_size += write_file(curr_inode, (char *)&file_data, curr_inode->file_size, sizeof(file_data));
+
+	struct inode *f_inode = (struct inode *)(disk->space + block_size + fnode * sizeof(struct inode));
+	f_inode->valid = true;					//the inode is now valid
+	f_inode->file = false;					//it is a directory
+	f_inode->file_size = 0;					//file_size is 0
+
+	//initializing inode to default values
+
+	for(int i=0; i<NUMBER_OF_DP; i++) {
+		f_inode->dp[i] = -1;				
+	}
+
+	f_inode->sip = -1;
+	f_inode->dip = -1;
+
+
+	//adding the directory entry "."
+
+	struct dentry temp;
+	strcpy(temp.filename, ".");											// . is the current directory
+	temp.f_inode_n = fnode;
+	f_inode->file_size += write_file(f_inode, (char *)&temp, f_inode->file_size, sizeof(temp));
+
+	//adding the directory entry "."
+
+	strcpy(temp.filename, "..");										// .. is the parent directory
+	temp.f_inode_n = curr;													//root's parent is root itself
+	f_inode->file_size += write_file(f_inode, (char *)&temp, f_inode->file_size, sizeof(temp));
+
+
+
 	return 0;
+}
+
+int my_rmdir(const char *filename, int recurseCount){
+
+	string inputpath(filename);
+
+	//takes filename as input which is the path
+	
+	char *args[MAX_PATH];
+	char path[MAX_PATH];
+
+	strcpy(path, filename);
+
+	int n = breakString(args, path, "/\n");				//args[n] = NULL
+
+	int curr;
+	if(filename[0] == '/') 
+		curr = 0;										//current directory is root
+	else
+		curr = wd;										//current directory same as working directory
+
+	for(int i=0; i<n-1; i++) {
+
+		//check if the intermediate names are valid directories
+
+		if(!parse_path(curr, (char *)args[i])) {
+			perror("Wrong Path\n");
+			return -1;
+		}
+	}
+
+	//filename is too long
+	if(strlen(args[n-1])>13) {
+		printf("Name is too long");
+		return -1;
+	}
+
+	//curr is now inode of the directory in which the file is residing
+
+	struct inode *curr_inode = (struct inode *)(disk->space + block_size + curr*sizeof(struct inode));
+	char *buf = (char *)malloc(curr_inode->file_size);
+
+	//reading current directory contents in buf
+	read_file(curr_inode, buf, 0, curr_inode->file_size);
+	
+	//searching for file in the directory
+	struct dentry *d = (struct dentry *)buf;
+	for(int i=0; i<curr_inode->file_size/sizeof(dentry); i++) {
+		// previously d was not increased
+		if(!strcmp((d+i)->filename, args[n-1])) {
+
+			//remove the directory whose inode is at index (d+i)->f_inode_n
+
+			struct inode *dir_inode = (struct inode *)(disk->space + block_size + ((d+i)->f_inode_n) * sizeof(struct inode));
+
+			
+			char *buf = (char *)malloc(dir_inode->file_size);
+			read_file(dir_inode, buf, 0, dir_inode->file_size);
+
+			//cout<<"qwe : \n";
+
+			struct dentry *dire = (struct dentry *)buf;
+
+			for(int t = 0; t<dir_inode->file_size/sizeof(dentry);t++){
+				struct inode *eachentry = (struct inode *)(disk->space + block_size + ((dire+t)->f_inode_n) * sizeof(struct inode));
+
+				if(eachentry->file == true){
+					string g = inputpath+'/'+(dire+t)->filename;
+
+					char *fileEmptyBuffer = (char*)malloc(eachentry->file_size);
+					bzero(fileEmptyBuffer,eachentry->file_size);
+					write_file(eachentry, fileEmptyBuffer, 0, eachentry->file_size, 1);
+					free(fileEmptyBuffer);
+					eachentry->valid = false;
+					//cout<<g<<'\n';
+					//remove_file()
+				}
+				else{
+					//cout<<inputpath+'/'+(dire+t)->filename<<'\n';
+
+					string g = inputpath+'/'+(dire+t)->filename;
+					//cout<<g<<'\n';
+
+					if(strcmp((dire+t)->filename,".")!=0 && strcmp((dire+t)->filename,"..")!=0){
+						my_rmdir(g.c_str(),recurseCount+1);
+					}
+				}
+
+				//freeing the inode
+				//eachentry->valid = false;
+				//eachentry->file = false;
+				//eachentry->file_size = 0;
+
+				//cout<<eachentry->file<<'\n';
+			}
+			//cout<<"qazwsxedc\n";
+			//cout<<(d+i)->filename<<endl;
+
+			char *buffer = (char *)malloc(dir_inode->file_size);
+			bzero(buffer,dir_inode->file_size);
+			write_file(dir_inode, buffer, 0, dir_inode->file_size, 1);
+			free(buffer);
+
+			dir_inode->valid = false;
+			dir_inode->file_size = 0;
+
+			//removing directory from the parent directory list
+			if(recurseCount == 0){
+				int c = read_file(curr_inode, buf, sizeof(dentry)*(i+1), curr_inode->file_size);
+				write_file(curr_inode, buf, sizeof(dentry)*i, c);
+			}
+			//cout<<'\n';
+
+			// bool valid;										//valid means it has some file associated with it
+			// bool file;										//true if it represents a file
+			// unsigned long long file_size;					//stores size of file
+			// int dp[NUMBER_OF_DP];							//direct pointers
+			// int sip;										//singly indirect pointers
+			// int dip;										//doubly indirect pointers
+
+			free(buf);
+			return 0;
+		}
+	}
+
+	return -1;
+}
+
+int my_chdir(const char *filename){
+
+	//takes filename as input which is the path
+	
+	char *args[MAX_PATH];
+	char path[MAX_PATH];
+
+	strcpy(path, filename);
+
+	int n = breakString(args, path, "/\n");				//args[n] = NULL
+
+	if(n==0){
+		wd = 0;
+		return 0;
+	}
+
+	int curr;
+	if(filename[0] == '/') 
+		curr = 0;										//current directory is root
+	else
+		curr = wd;										//current directory same as working directory
+
+	for(int i=0; i<n-1; i++) {
+
+		//check if the intermediate names are valid directories
+
+		if(!parse_path(curr, (char *)args[i])) {
+			perror("Wrong Path\n");
+			return -1;
+		}
+	}
+
+	//filename is too long
+	if(strlen(args[n-1])>13) {
+		printf("Name is too long");
+		return -1;
+	}
+
+	//curr is now inode of the directory in which the file is residing
+
+	struct inode *curr_inode = (struct inode *)(disk->space + block_size + curr*sizeof(struct inode));
+	char *buf = (char *)malloc(curr_inode->file_size);
+
+	//reading current directory contents in buf
+	read_file(curr_inode, buf, 0, curr_inode->file_size);
+	
+	//searching for file in the directory
+	struct dentry *d = (struct dentry *)buf;
+	for(int i=0; i<curr_inode->file_size/sizeof(dentry); i++) {
+		// previously d was not increased
+		if(!strcmp((d+i)->filename, args[n-1])) {
+
+			wd = (d+i)->f_inode_n;
+
+			//cout<<wd<<'\n';
+
+			return 0;
+		}
+	}
+
+	return -1;
 }

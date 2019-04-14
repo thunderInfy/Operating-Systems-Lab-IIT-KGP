@@ -47,3 +47,5 @@
 7)	
 	Is there any reason why're you not resetting the write_pointer in my_close?
 	open_files[fd].write_pointer = 0;
+
+	Is it because default mode is append?

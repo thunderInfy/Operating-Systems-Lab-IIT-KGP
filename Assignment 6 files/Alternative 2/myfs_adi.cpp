@@ -255,8 +255,9 @@ bool get_location(struct pointer_location &p) {
 	p.dip[0] = 0;
 	p.dip[1] = 0;
 
-	//get dp pointer value
-	p.dp = p.pointer/block_size;
+	// get dp pointer value
+	// p.dp = p.pointer/block_size;
+	p.dp = p.pointer/data_size;
 
 	if(p.dp >= NUMBER_OF_DP){ 
 
@@ -265,30 +266,38 @@ bool get_location(struct pointer_location &p) {
 		p.sip = p.dp - NUMBER_OF_DP;
 	}
 	
-	unsigned long long n_entries = block_size/sizeof(int);
+	// bug 3 corrected : better declare a global variable
+	// unsigned long long n_entries = block_size/sizeof(int);
+	unsigned long long n_entries = data_size/sizeof(int);
 
 	if(p.sip >= n_entries) {
 
 		//p.sip exceeds, p.dip has to be used
 
-		p.pointer -= (NUMBER_OF_DP + n_entries) * block_size;
+		// p.pointer -= (NUMBER_OF_DP + n_entries) * block_size;
+		p.pointer -= (NUMBER_OF_DP + n_entries) * data_size;
 
 		//calculating p.dip[0]
-		p.dip[0] = p.pointer/(n_entries * block_size);
+		// p.dip[0] = p.pointer/(n_entries * block_size);
+		p.dip[0] = p.pointer/(n_entries * data_size);
 		if(p.dip[0] > n_entries) {
 			perror("Read/Write pointer error, pointer out of bounds!");
 			return false;
 		}
 
-		//calculating p.dip[1] and p.pointer
-		p.pointer = p.pointer%(n_entries * block_size);
-		p.dip[1] = p.pointer/block_size;
-		p.pointer = p.pointer%block_size;
+		// calculating p.dip[1] and p.pointer
+		// p.pointer = p.pointer%(n_entries * block_size);
+		// p.dip[1] = p.pointer/block_size;
+		// p.pointer = p.pointer%block_size;
+
+		p.pointer = p.pointer%(n_entries * data_size);
+		p.dip[1] = p.pointer/data_size;
+		p.pointer = p.pointer%data_size;
 	}
 	else{ 
 	
 		//otherwise just set p.pointer to the following value
-		p.pointer = p.pointer%block_size;
+		p.pointer = p.pointer%data_size;
 	}
 
 	return true;
@@ -496,6 +505,13 @@ unsigned long long write_file(struct inode *fd_ptr, char *buf, unsigned long lon
 	int *block_addr = (int *)(disk->space + block_size * dip_addr);
 	for(int i=p.dip[0]; i<data_size/sizeof(int); i++) {
 		int blk = *(block_addr + i);
+
+		// bug 2 corrected
+		if(blk == -1) {
+			blk = getFreeBlock();
+			*(block_addr + i) = blk;
+		}
+
 		bytes_written += write_block_pointers(blk, p.pointer, p.dip[1], buf + bytes_written, count - bytes_written);
 
 		if(bytes_written == count) {
@@ -604,6 +620,11 @@ unsigned long long read_file(struct inode *fd_ptr, char *buf, unsigned long long
 	int *block_addr = (int *)(disk->space + block_size*dip_addr);
 	for(int i=p.dip[0]; i<data_size/sizeof(int); i++) {
 		int blk = *(block_addr + i);
+
+		// bug 4 corrected
+		if(blk == -1) {
+			return bytes_read;
+		}
 
 		bytes_read += read_block_pointers(blk, p.pointer, p.dip[1], buf + bytes_read, count - bytes_read);
 		if(bytes_read == count) {
@@ -727,12 +748,16 @@ int my_open(const char *filename) {
 	
 	//searching for file in the directory
 	struct dentry *d = (struct dentry *)buf;
-	for(int i=0; i<sizeof(buf)/sizeof(dentry); i++) {
-		if(!strcmp(d->filename, args[n-1])) {
+	for(int i=0; i<curr_inode->file_size/sizeof(dentry); i++) {
+		// previously d was not increased
+		if(!strcmp((d+i)->filename, args[n-1])) {
 
 			//updating the open files vector
 
-			struct files open_file(d->f_inode_n, 0, 0);
+			// bug 7 urgent bug
+			struct inode *f_inode = (struct inode *)(disk->space + block_size + ((d+i)->f_inode_n)*sizeof(struct inode));
+
+			struct files open_file((d+i)->f_inode_n, 0, f_inode->file_size);
 			open_files.push_back(open_file);
 			return open_files.size()-1;
 		}

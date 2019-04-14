@@ -1,0 +1,19 @@
+1) In write operation, if count > strlen(buffer)+1, it can potentially cause a segmentation fault. 
+	Possible Solution:
+	So, if count is greater than strlen(buffer)+1, then count should be set to strlen(buffer)+1
+
+
+2) 	int *block_addr = (int *)(disk->space + block_size * dip_addr);
+	for(int i=p.dip[0]; i<data_size/sizeof(int); i++) {
+		int blk = *(block_addr + i);
+		bytes_written += write_block_pointers(blk, p.pointer, p.dip[1], buf + bytes_written, count - bytes_written);
+
+		if(bytes_written == count) {
+			return bytes_written;
+		}
+
+		p.dip[1] = 0;
+		p.pointer = 0;
+	}
+
+	What if blk is -1 in this code?
